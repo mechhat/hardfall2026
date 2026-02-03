@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Other
+.claude
+.planning
+
+# Video uploads (keep folder, ignore contents)
+videos/*
+!videos/.gitkeep
+
+#
+*.log
+*.pot
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
