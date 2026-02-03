@@ -1,0 +1,403 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ analysis.team }} - {{ analysis.match }} - Hardfall{% endblock %}
+
+{% block content %}
+<h1>{{ analysis.team }} - {{ analysis.match }}</h1>
+
+<video id="video-player" width="100%" style="max-width: 1280px;">
+    <source src="{% url 'video_serve' analysis.video.id %}" type="video/mp4">
+    Your browser does not support the video tag.
+</video>
+
+<div id="video-controls" style="margin-top: 8px; display: flex; align-items: center; gap: 10px; max-width: 1280px;">
+    <button id="play-pause-btn" style="width: 60px;">Play</button>
+    <span id="current-time-display" style="font-family: monospace; min-width: 80px;">0:00.00</span>
+    <input type="range" id="seek-bar" value="0" min="0" max="100" step="0.1" style="flex: 1;">
+    <span id="duration-display" style="font-family: monospace; min-width: 80px;">0:00.00</span>
+</div>
+
+<div id="action-buttons" style="margin: 15px 0; display: flex; flex-wrap: wrap; gap: 8px;"></div>
+
+<div id="new-mark-controls" style="margin: 15px 0; padding: 10px; background: #f0f0f0; border-radius: 4px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+    <strong>New mark:</strong>
+    <label style="display: flex; align-items: center; gap: 5px;">
+        <input type="checkbox" id="new-failure-toggle">
+        Failure
+    </label>
+    <label style="display: flex; align-items: center; gap: 5px;">
+        Count:
+        <input type="number" id="new-count-input" value="1" min="1" max="99" style="width: 60px;">
+    </label>
+</div>
+
+<div id="current-mark-display" style="margin: 15px 0; padding: 10px; background: #e8f4e8; border-radius: 4px; display: none;">
+    <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+        <strong>Current mark:</strong>
+        <span id="current-mark-action"></span>
+        <span id="current-mark-time" style="font-family: monospace;"></span>
+        <label style="display: flex; align-items: center; gap: 5px;">
+            <input type="checkbox" id="current-failure-toggle">
+            Failure
+        </label>
+        <label style="display: flex; align-items: center; gap: 5px;">
+            Count:
+            <input type="number" id="current-count-input" value="1" min="1" max="99" style="width: 60px;">
+        </label>
+        <button id="delete-mark-btn" style="background: #cc0000; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Delete</button>
+    </div>
+</div>
+
+<h2>Marks</h2>
+<table id="marks-table" style="width: 100%; border-collapse: collapse;">
+    <thead>
+        <tr style="text-align: left; border-bottom: 2px solid #ccc;">
+            <th style="padding: 8px;">Time</th>
+            <th style="padding: 8px;">Delta</th>
+            <th style="padding: 8px;">Action</th>
+            <th style="padding: 8px;">Count</th>
+            <th style="padding: 8px;">Failure</th>
+            <th style="padding: 8px;">Points</th>
+        </tr>
+    </thead>
+    <tbody id="marks-body"></tbody>
+</table>
+
+<div style="margin-top: 20px;">
+    <button id="save-btn" style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold;">Save Marks</button>
+    <span id="save-status" style="margin-left: 10px;"></span>
+</div>
+
+<p style="margin-top: 20px;"><a href="{% url 'event_detail' analysis.event.id %}">&larr; Back to {{ analysis.event.name }}</a></p>
+
+<script>
+window.ANALYSIS_ID = {{ analysis.id }};
+window.INITIAL_MARKS = {{ marks_json|safe }};
+window.ACTIONS = {{ actions_json|safe }};
+window.CSRF_TOKEN = '{{ csrf_token }}';
+window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
+</script>
+
+<script>
+(function() {
+    let marks = [...window.INITIAL_MARKS];
+    const actions = window.ACTIONS;
+    const actionsById = {};
+    let currentMarkRef = null;
+
+    actions.forEach(action => {
+        actionsById[action.id] = action;
+    });
+
+    function formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = (seconds % 60).toFixed(2);
+        return mins + ':' + secs.padStart(5, '0');
+    }
+
+    function sortMarks() {
+        marks.sort((a, b) => b.time_seconds - a.time_seconds);
+    }
+
+    function recomputeDeltas() {
+        // Sort by time ascending to compute deltas
+        const sorted = [...marks].sort((a, b) => a.time_seconds - b.time_seconds);
+        let prevTime = 0;
+        sorted.forEach(mark => {
+            mark.delta_seconds = mark.time_seconds - prevTime;
+            prevTime = mark.time_seconds;
+        });
+    }
+
+    function findMarkAtTime(timeSeconds) {
+        return marks.find(m => Math.abs(m.time_seconds - timeSeconds) < 0.0001);
+    }
+
+    function renderActionButtons() {
+        const container = document.getElementById('action-buttons');
+        container.innerHTML = '';
+
+        actions.forEach(action => {
+            const btn = document.createElement('button');
+            btn.textContent = action.code;
+            btn.title = action.name + ' (' + action.points + ' pts)';
+            btn.style.cssText = 'background: #0066cc; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;';
+            btn.addEventListener('click', () => handleActionClick(action));
+            btn.addEventListener('mouseenter', () => btn.style.background = '#0055aa');
+            btn.addEventListener('mouseleave', () => btn.style.background = '#0066cc');
+            container.appendChild(btn);
+        });
+    }
+
+    function renderMarksTable() {
+        recomputeDeltas();
+
+        const tbody = document.getElementById('marks-body');
+        tbody.innerHTML = '';
+
+        sortMarks();
+
+        marks.forEach((mark, index) => {
+            const action = actionsById[mark.action_id];
+            const points = mark.is_failure ? 0 : action.points * mark.count;
+
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #eee';
+
+            const timeTd = document.createElement('td');
+            timeTd.style.padding = '8px';
+            const timeLink = document.createElement('a');
+            timeLink.href = '#';
+            timeLink.textContent = formatTime(mark.time_seconds);
+            timeLink.style.fontFamily = 'monospace';
+            timeLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.getElementById('video-player').currentTime = mark.time_seconds;
+            });
+            timeTd.appendChild(timeLink);
+
+            const deltaTd = document.createElement('td');
+            deltaTd.style.padding = '8px';
+            deltaTd.style.fontFamily = 'monospace';
+            deltaTd.textContent = mark.delta_seconds.toFixed(2) + 's';
+
+            const actionTd = document.createElement('td');
+            actionTd.style.padding = '8px';
+            actionTd.textContent = action.code;
+
+            const countTd = document.createElement('td');
+            countTd.style.padding = '8px';
+            countTd.textContent = mark.count;
+
+            const failureTd = document.createElement('td');
+            failureTd.style.padding = '8px';
+            if (mark.is_failure) {
+                failureTd.textContent = 'Yes';
+                failureTd.style.color = '#cc0000';
+            }
+
+            const pointsTd = document.createElement('td');
+            pointsTd.style.padding = '8px';
+            if (points > 0) {
+                pointsTd.textContent = points;
+            }
+
+            tr.appendChild(timeTd);
+            tr.appendChild(deltaTd);
+            tr.appendChild(actionTd);
+            tr.appendChild(countTd);
+            tr.appendChild(failureTd);
+            tr.appendChild(pointsTd);
+
+            tbody.appendChild(tr);
+        });
+    }
+
+    function updateCurrentMarkDisplay() {
+        const video = document.getElementById('video-player');
+        const currentTime = video.currentTime;
+        const display = document.getElementById('current-mark-display');
+        const mark = findMarkAtTime(currentTime);
+
+        if (mark) {
+            currentMarkRef = mark;
+            const action = actionsById[mark.action_id];
+            document.getElementById('current-mark-action').textContent = action.code + ' - ' + action.name;
+            document.getElementById('current-mark-time').textContent = '@ ' + formatTime(mark.time_seconds);
+            document.getElementById('current-failure-toggle').checked = mark.is_failure;
+            document.getElementById('current-count-input').value = mark.count;
+            display.style.display = 'block';
+        } else {
+            currentMarkRef = null;
+            display.style.display = 'none';
+        }
+    }
+
+    function handleCurrentMarkFailureChange() {
+        if (currentMarkRef) {
+            currentMarkRef.is_failure = document.getElementById('current-failure-toggle').checked;
+            renderMarksTable();
+        }
+    }
+
+    function handleCurrentMarkCountChange() {
+        if (currentMarkRef) {
+            currentMarkRef.count = parseInt(document.getElementById('current-count-input').value) || 1;
+            renderMarksTable();
+        }
+    }
+
+    function handleDeleteCurrentMark() {
+        if (currentMarkRef) {
+            const index = marks.indexOf(currentMarkRef);
+            if (index > -1) {
+                marks.splice(index, 1);
+                currentMarkRef = null;
+                document.getElementById('current-mark-display').style.display = 'none';
+                renderMarksTable();
+            }
+        }
+    }
+
+    function handleActionClick(action) {
+        const video = document.getElementById('video-player');
+        const currentTime = video.currentTime;
+        const isFailure = document.getElementById('new-failure-toggle').checked;
+        const count = parseInt(document.getElementById('new-count-input').value) || 1;
+
+        const existingMark = findMarkAtTime(currentTime);
+
+        if (existingMark) {
+            existingMark.action_id = action.id;
+            existingMark.action_code = action.code;
+            existingMark.is_failure = isFailure;
+            existingMark.count = count;
+        } else {
+            marks.push({
+                id: null,
+                action_id: action.id,
+                action_code: action.code,
+                time_seconds: currentTime,
+                delta_seconds: 0,
+                is_failure: isFailure,
+                count: count,
+            });
+        }
+
+        renderMarksTable();
+        updateCurrentMarkDisplay();
+    }
+
+    async function handleSave() {
+        const saveBtn = document.getElementById('save-btn');
+        const statusSpan = document.getElementById('save-status');
+
+        saveBtn.disabled = true;
+        statusSpan.textContent = 'Saving...';
+
+        const payload = {
+            marks: marks.map(m => ({
+                action_id: m.action_id,
+                time_seconds: m.time_seconds,
+                is_failure: m.is_failure,
+                count: m.count,
+            }))
+        };
+
+        try {
+            const response = await fetch(window.SAVE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': window.CSRF_TOKEN,
+                },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                marks = data.marks;
+                renderMarksTable();
+                updateCurrentMarkDisplay();
+                statusSpan.textContent = 'Saved!';
+                setTimeout(() => { statusSpan.textContent = ''; }, 2000);
+            } else {
+                statusSpan.textContent = data.error || 'Save failed';
+            }
+        } catch (err) {
+            statusSpan.textContent = 'Save failed: ' + err.message;
+        } finally {
+            saveBtn.disabled = false;
+        }
+    }
+
+    function handleVideoWheel(e) {
+        e.preventDefault();
+        const video = document.getElementById('video-player');
+
+        if (!video.paused) {
+            video.pause();
+        }
+
+        // Normalize wheel delta across browsers
+        let delta = e.deltaY;
+        if (e.deltaMode === 1) { // DOM_DELTA_LINE
+            delta *= 20;
+        } else if (e.deltaMode === 2) { // DOM_DELTA_PAGE
+            delta *= 100;
+        }
+
+        // Apply exponential scaling: small movements = precise, large = fast scrub
+        // Sign preserves direction, magnitude gets exponential treatment
+        const sign = delta > 0 ? 1 : -1;
+        const absDelta = Math.abs(delta);
+
+        // Base: ~0.033s per small scroll tick (1 frame at 30fps)
+        // Exponential: larger scrolls move much faster
+        const scaledDelta = sign * Math.pow(absDelta / 50, 1.5) * 0.1;
+
+        const newTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + scaledDelta));
+        video.currentTime = newTime;
+    }
+
+    function init() {
+        renderActionButtons();
+        renderMarksTable();
+
+        const video = document.getElementById('video-player');
+        video.addEventListener('timeupdate', updateCurrentMarkDisplay);
+        video.addEventListener('seeked', updateCurrentMarkDisplay);
+        video.addEventListener('wheel', handleVideoWheel, { passive: false });
+
+        // Force first frame to render (some browsers show black until played/seeked)
+        video.addEventListener('loadedmetadata', () => {
+            if (video.currentTime === 0) {
+                video.currentTime = 0.001;
+            }
+            document.getElementById('duration-display').textContent = formatTime(video.duration);
+            document.getElementById('seek-bar').max = video.duration;
+        });
+
+        // Custom controls
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const seekBar = document.getElementById('seek-bar');
+        const currentTimeDisplay = document.getElementById('current-time-display');
+
+        playPauseBtn.addEventListener('click', () => {
+            if (video.paused) {
+                video.play();
+            } else {
+                video.pause();
+            }
+        });
+
+        video.addEventListener('play', () => {
+            playPauseBtn.textContent = 'Pause';
+        });
+
+        video.addEventListener('pause', () => {
+            playPauseBtn.textContent = 'Play';
+        });
+
+        video.addEventListener('timeupdate', () => {
+            currentTimeDisplay.textContent = formatTime(video.currentTime);
+            if (!seekBar.matches(':active')) {
+                seekBar.value = video.currentTime;
+            }
+        });
+
+        seekBar.addEventListener('input', () => {
+            video.currentTime = parseFloat(seekBar.value);
+        });
+
+        document.getElementById('current-failure-toggle').addEventListener('change', handleCurrentMarkFailureChange);
+        document.getElementById('current-count-input').addEventListener('change', handleCurrentMarkCountChange);
+        document.getElementById('delete-mark-btn').addEventListener('click', handleDeleteCurrentMark);
+        document.getElementById('save-btn').addEventListener('click', handleSave);
+    }
+
+    init();
+})();
+</script>
+{% endblock %}

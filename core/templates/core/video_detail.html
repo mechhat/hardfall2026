@@ -1,0 +1,28 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ video.filename }} - Hardfall{% endblock %}
+
+{% block content %}
+<h1>{{ video.filename }}</h1>
+
+<video controls width="100%" style="max-width: 1280px;">
+    <source src="{% url 'video_serve' video.id %}" type="video/mp4">
+    Your browser does not support the video tag.
+</video>
+
+<h2>Create Analysis</h2>
+<form method="post" action="{% url 'analysis_create' video.id %}">
+    {% csrf_token %}
+    <p>
+        <label for="team">Team:</label><br>
+        <input type="text" id="team" name="team" required>
+    </p>
+    <p>
+        <label for="match">Match:</label><br>
+        <input type="text" id="match" name="match" required>
+    </p>
+    <button type="submit">Create Analysis</button>
+</form>
+
+<p><a href="{% url 'event_detail' video.event.id %}">&larr; Back to {{ video.event.name }}</a></p>
+{% endblock %}

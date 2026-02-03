@@ -1,0 +1,22 @@
+{% extends "core/base.html" %}
+
+{% block title %}Events - Hardfall{% endblock %}
+
+{% block content %}
+<h1>Events</h1>
+
+{% if events %}
+<ul class="event-list">
+    {% for event in events %}
+    <li>
+        <a href="{% url 'event_detail' event.id %}">{{ event.name }}</a>
+        <span class="event-date">{{ event.date }}</span>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>No events yet.</p>
+{% endif %}
+
+<p class="subtle"><a href="{% url 'event_create' %}">+ Add event</a></p>
+{% endblock %}

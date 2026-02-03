@@ -1,0 +1,91 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ event.name }} - Hardfall{% endblock %}
+
+{% block content %}
+<h1>{{ event.name }}</h1>
+<p class="event-date">{{ event.date }}</p>
+
+<p><a href="#" id="upload-link">Upload Video</a></p>
+
+<div id="upload-form" style="display: none; margin-bottom: 20px; padding: 15px; background: #f0f0f0; border-radius: 4px;">
+    <form id="video-upload-form" enctype="multipart/form-data">
+        {% csrf_token %}
+        <label for="filename">Video Name</label>
+        <input type="text" id="filename" name="filename" required>
+
+        <label for="video">Video File</label>
+        <input type="file" id="video" name="video" accept="video/*" required style="margin-bottom: 15px;">
+
+        <button type="submit" id="upload-btn">Upload</button>
+        <span id="upload-status" style="margin-left: 10px;"></span>
+    </form>
+</div>
+
+<script>
+(function() {
+    const uploadLink = document.getElementById('upload-link');
+    const uploadForm = document.getElementById('upload-form');
+    const form = document.getElementById('video-upload-form');
+    const uploadBtn = document.getElementById('upload-btn');
+    const statusSpan = document.getElementById('upload-status');
+
+    uploadLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        uploadForm.style.display = uploadForm.style.display === 'none' ? 'block' : 'none';
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const formData = new FormData(form);
+        uploadBtn.disabled = true;
+        statusSpan.textContent = 'Uploading...';
+
+        fetch('{% url "video_upload" event.id %}', {
+            method: 'POST',
+            body: formData,
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = data.redirect_url;
+            } else {
+                statusSpan.textContent = data.error || 'Upload failed';
+                uploadBtn.disabled = false;
+            }
+        })
+        .catch(err => {
+            statusSpan.textContent = 'Upload failed: ' + err.message;
+            uploadBtn.disabled = false;
+        });
+    });
+})();
+</script>
+
+<h2>Analyses</h2>
+{% if analyses %}
+<ul class="item-list">
+    {% for analysis in analyses %}
+    <li>
+        <a href="{% url 'analysis_detail' analysis.id %}">{{ analysis.team }} - {{ analysis.match }}</a>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p>No analyses yet.</p>
+{% endif %}
+
+{% if unlinked_videos %}
+<h2>Unlinked Videos</h2>
+<ul class="item-list">
+    {% for video in unlinked_videos %}
+    <li>
+        <a href="{% url 'video_detail' video.id %}">{{ video.filename }}</a>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+<p><a href="{% url 'event_list' %}">&larr; Back to events</a></p>
+{% endblock %}
