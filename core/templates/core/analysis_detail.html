@@ -239,13 +239,25 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             const div = document.createElement('div');
             div.style.cssText = 'background: white; padding: 10px 15px; border-radius: 4px; border: 1px solid #ddd; min-width: 100px;';
 
-            let html = '<strong>' + stats.code + '</strong><br>';
-            html += '<span style="font-size: 24px; font-weight: bold;">' + stats.count + '</span>';
+            const codeLabel = document.createElement('strong');
+            codeLabel.textContent = stats.code;
+            div.appendChild(codeLabel);
+
+            div.appendChild(document.createElement('br'));
+
+            const countSpan = document.createElement('span');
+            countSpan.style.cssText = 'font-size: 24px; font-weight: bold;';
+            countSpan.textContent = stats.count;
+            div.appendChild(countSpan);
+
             if (stats.failures > 0) {
-                html += '<br><span style="color: #cc0000; font-size: 12px;">' + stats.failures + ' failed</span>';
+                div.appendChild(document.createElement('br'));
+                const failedSpan = document.createElement('span');
+                failedSpan.style.cssText = 'color: #cc0000; font-size: 12px;';
+                failedSpan.textContent = stats.failures + ' failed';
+                div.appendChild(failedSpan);
             }
 
-            div.innerHTML = html;
             div.title = stats.name + ': ' + stats.count + ' total, ' + stats.points + ' points';
             totalsContainer.appendChild(div);
         });
@@ -254,7 +266,18 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         if (marks.length > 0) {
             const totalDiv = document.createElement('div');
             totalDiv.style.cssText = 'background: #28a745; color: white; padding: 10px 15px; border-radius: 4px; min-width: 100px;';
-            totalDiv.innerHTML = '<strong>Total Points</strong><br><span style="font-size: 24px; font-weight: bold;">' + totalPoints + '</span>';
+
+            const totalLabel = document.createElement('strong');
+            totalLabel.textContent = 'Total Points';
+            totalDiv.appendChild(totalLabel);
+
+            totalDiv.appendChild(document.createElement('br'));
+
+            const totalSpan = document.createElement('span');
+            totalSpan.style.cssText = 'font-size: 24px; font-weight: bold;';
+            totalSpan.textContent = totalPoints;
+            totalDiv.appendChild(totalSpan);
+
             totalsContainer.appendChild(totalDiv);
         }
     }
