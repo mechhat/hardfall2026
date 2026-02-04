@@ -68,6 +68,11 @@
     <span id="save-status" style="margin-left: 10px;"></span>
 </div>
 
+<div id="marks-summary" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
+    <h3 style="margin: 0 0 10px 0;">Totals</h3>
+    <div id="marks-totals" style="display: flex; flex-wrap: wrap; gap: 15px;"></div>
+</div>
+
 <p style="margin-top: 20px;"><a href="{% url 'event_detail' analysis.event.id %}">&larr; Back to {{ analysis.event.name }}</a></p>
 
 <script>
@@ -191,6 +196,67 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
             tbody.appendChild(tr);
         });
+
+        renderMarksTotals();
+    }
+
+    function renderMarksTotals() {
+        const totalsContainer = document.getElementById('marks-totals');
+
+        // Count marks by action type
+        const countsByAction = {};
+        let totalPoints = 0;
+
+        marks.forEach(mark => {
+            const action = actionsById[mark.action_id];
+            if (!countsByAction[action.id]) {
+                countsByAction[action.id] = {
+                    code: action.code,
+                    name: action.name,
+                    count: 0,
+                    failures: 0,
+                    points: 0
+                };
+            }
+            countsByAction[action.id].count += mark.count;
+            if (mark.is_failure) {
+                countsByAction[action.id].failures += mark.count;
+            } else {
+                const pts = action.points * mark.count;
+                countsByAction[action.id].points += pts;
+                totalPoints += pts;
+            }
+        });
+
+        // Render totals
+        totalsContainer.innerHTML = '';
+
+        // Sort actions by their original order
+        const sortedActions = actions.filter(a => countsByAction[a.id]);
+
+        sortedActions.forEach(action => {
+            const stats = countsByAction[action.id];
+            const div = document.createElement('div');
+            div.style.cssText = 'background: white; padding: 10px 15px; border-radius: 4px; border: 1px solid #ddd; min-width: 100px;';
+
+            let html = '<strong>' + stats.code + '</strong><br>';
+            html += '<span style="font-size: 24px; font-weight: bold;">' + stats.count + '</span>';
+            if (stats.failures > 0) {
+                html += '<br><span style="color: #cc0000; font-size: 12px;">' + stats.failures + ' failed</span>';
+            }
+
+            div.innerHTML = html;
+            div.title = stats.name + ': ' + stats.count + ' total, ' + stats.points + ' points';
+            totalsContainer.appendChild(div);
+        });
+
+        // Add total points box
+        if (marks.length > 0) {
+            const totalDiv = document.createElement('div');
+            totalDiv.style.cssText = 'background: #28a745; color: white; padding: 10px 15px; border-radius: 4px; min-width: 100px;';
+            totalDiv.innerHTML = '<strong>Total Points</strong><br><span style="font-size: 24px; font-weight: bold;">' + totalPoints + '</span>';
+            totalsContainer.appendChild(totalDiv);
+        }
     }
 
     function updateCurrentMarkDisplay() {
