@@ -439,6 +439,25 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         video.addEventListener('seeked', updateCurrentMarkDisplay);
         video.addEventListener('wheel', handleVideoWheel, { passive: false });
 
+        // Keyboard shortcut: 's' to mark a score when hovering over video
+        let isHoveringVideo = false;
+        video.addEventListener('mouseenter', () => { isHoveringVideo = true; });
+        video.addEventListener('mouseleave', () => { isHoveringVideo = false; });
+
+        document.addEventListener('keydown', (e) => {
+            if (!isHoveringVideo) return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            if (e.key === 's' || e.key === 'S') {
+                e.preventDefault();
+                // Find the "SC" (Score) action
+                const scoreAction = actions.find(a => a.code === 'SC');
+                if (scoreAction) {
+                    handleActionClick(scoreAction);
+                }
+            }
+        });
+
         // Force first frame to render (some browsers show black until played/seeked)
         video.addEventListener('loadedmetadata', () => {
             if (video.currentTime === 0) {
