@@ -330,37 +330,71 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
     function renderVolleys() {
         const container = document.getElementById('volleys-container');
+        container.innerHTML = '';
         const volleys = computeVolleys();
 
         if (volleys.length === 0) {
-            container.innerHTML = '<p style="color: #999; margin: 0;">No marks recorded yet.</p>';
+            const p = document.createElement('p');
+            p.style.cssText = 'color: #999; margin: 0;';
+            p.textContent = 'No marks recorded yet.';
+            container.appendChild(p);
             return;
         }
 
-        let html = '<table style="width: 100%; border-collapse: collapse;">';
-        html += '<thead><tr style="text-align: left; border-bottom: 2px solid #ccc;">';
-        html += '<th style="padding: 8px;">#</th>';
-        html += '<th style="padding: 8px;">Time Range</th>';
-        html += '<th style="padding: 8px;">Shots</th>';
-        html += '<th style="padding: 8px;">Success %</th>';
-        html += '<th style="padding: 8px;">Balls/Sec</th>';
-        html += '</tr></thead><tbody>';
+        const table = document.createElement('table');
+        table.style.cssText = 'width: 100%; border-collapse: collapse;';
 
-        volleys.forEach(v => {
-            html += '<tr style="border-bottom: 1px solid #eee;">';
-            html += '<td style="padding: 8px;">' + v.index + '</td>';
-            html += '<td style="padding: 8px; font-family: monospace;">'
-                + formatTime(v.startTime) + ' \u2013 ' + formatTime(v.endTime) + '</td>';
-            html += '<td style="padding: 8px;">' + v.shots
-                + ' (' + v.successfulShots + ' ok)</td>';
-            html += '<td style="padding: 8px;">' + v.successPct.toFixed(0) + '%</td>';
-            html += '<td style="padding: 8px;">'
-                + (v.bps !== null ? v.bps.toFixed(2) : 'N/A') + '</td>';
-            html += '</tr>';
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        headerRow.style.cssText = 'text-align: left; border-bottom: 2px solid #ccc;';
+
+        ['#', 'Time Range', 'Shots', 'Success %', 'Balls/Sec'].forEach(label => {
+            const th = document.createElement('th');
+            th.style.padding = '8px';
+            th.textContent = label;
+            headerRow.appendChild(th);
         });
 
-        html += '</tbody></table>';
-        container.innerHTML = html;
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+
+        volleys.forEach(v => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #eee';
+
+            const indexTd = document.createElement('td');
+            indexTd.style.padding = '8px';
+            indexTd.textContent = v.index;
+
+            const timeTd = document.createElement('td');
+            timeTd.style.cssText = 'padding: 8px; font-family: monospace;';
+            timeTd.textContent = formatTime(v.startTime) + ' \u2013 ' + formatTime(v.endTime);
+
+            const shotsTd = document.createElement('td');
+            shotsTd.style.padding = '8px';
+            shotsTd.textContent = v.shots + ' (' + v.successfulShots + ' ok)';
+
+            const successTd = document.createElement('td');
+            successTd.style.padding = '8px';
+            successTd.textContent = v.successPct.toFixed(0) + '%';
+
+            const bpsTd = document.createElement('td');
+            bpsTd.style.padding = '8px';
+            bpsTd.textContent = v.bps !== null ? v.bps.toFixed(2) : 'N/A';
+
+            tr.appendChild(indexTd);
+            tr.appendChild(timeTd);
+            tr.appendChild(shotsTd);
+            tr.appendChild(successTd);
+            tr.appendChild(bpsTd);
+
+            tbody.appendChild(tr);
+        });
+
+        table.appendChild(tbody);
+        container.appendChild(table);
     }
 
     function updateCurrentMarkDisplay() {
