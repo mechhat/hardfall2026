@@ -5,6 +5,11 @@
 - Django
 - uv (package manager)
 
+## Coding Conventions
+
+### JavaScript in Templates
+- Build views using `document.createElement()` and DOM APIs. Do not concatenate HTML strings or use `innerHTML` to construct views.
+
 ## Key Files
 
 ### Video Analysis
