@@ -73,6 +73,11 @@
     <div id="marks-totals" style="display: flex; flex-wrap: wrap; gap: 15px;"></div>
 </div>
 
+<div id="volleys-section" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
+    <h3 style="margin: 0 0 10px 0;">Volleys</h3>
+    <div id="volleys-container"></div>
+</div>
+
 <p style="margin-top: 20px;"><a href="{% url 'event_detail' analysis.event.id %}">&larr; Back to {{ analysis.event.name }}</a></p>
 
 <script>
@@ -198,6 +203,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         });
 
         renderMarksTotals();
+        renderVolleys();
     }
 
     function renderMarksTotals() {
@@ -280,6 +286,81 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
             totalsContainer.appendChild(totalDiv);
         }
+    }
+
+    function computeVolleys() {
+        if (marks.length === 0) return [];
+
+        const sorted = [...marks].sort((a, b) => a.time_seconds - b.time_seconds);
+        const volleys = [];
+        let currentVolley = [sorted[0]];
+
+        for (let i = 1; i < sorted.length; i++) {
+            const gap = sorted[i].time_seconds - sorted[i - 1].time_seconds;
+            if (gap <= 5) {
+                currentVolley.push(sorted[i]);
+            } else {
+                volleys.push(currentVolley);
+                currentVolley = [sorted[i]];
+            }
+        }
+        volleys.push(currentVolley);
+
+        return volleys.map((volley, index) => {
+            const shots = volley.length;
+            const successfulShots = volley.filter(m => !m.is_failure).length;
+            const successPct = (successfulShots / shots) * 100;
+            const startTime = volley[0].time_seconds;
+            const endTime = volley[volley.length - 1].time_seconds;
+            const duration = endTime - startTime;
+            const bps = duration > 0 ? (shots - 1) / duration : null;
+
+            return {
+                index: index + 1,
+                shots: shots,
+                successfulShots: successfulShots,
+                successPct: successPct,
+                startTime: startTime,
+                endTime: endTime,
+                duration: duration,
+                bps: bps
+            };
+        });
+    }
+
+    function renderVolleys() {
+        const container = document.getElementById('volleys-container');
+        const volleys = computeVolleys();
+
+        if (volleys.length === 0) {
+            container.innerHTML = '<p style="color: #999; margin: 0;">No marks recorded yet.</p>';
+            return;
+        }
+
+        let html = '<table style="width: 100%; border-collapse: collapse;">';
+        html += '<thead><tr style="text-align: left; border-bottom: 2px solid #ccc;">';
+        html += '<th style="padding: 8px;">#</th>';
+        html += '<th style="padding: 8px;">Time Range</th>';
+        html += '<th style="padding: 8px;">Shots</th>';
+        html += '<th style="padding: 8px;">Success %</th>';
+        html += '<th style="padding: 8px;">Balls/Sec</th>';
+        html += '</tr></thead><tbody>';
+
+        volleys.forEach(v => {
+            html += '<tr style="border-bottom: 1px solid #eee;">';
+            html += '<td style="padding: 8px;">' + v.index + '</td>';
+            html += '<td style="padding: 8px; font-family: monospace;">'
+                + formatTime(v.startTime) + ' \u2013 ' + formatTime(v.endTime) + '</td>';
+            html += '<td style="padding: 8px;">' + v.shots
+                + ' (' + v.successfulShots + ' ok)</td>';
+            html += '<td style="padding: 8px;">' + v.successPct.toFixed(0) + '%</td>';
+            html += '<td style="padding: 8px;">'
+                + (v.bps !== null ? v.bps.toFixed(2) : 'N/A') + '</td>';
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
     }
 
     function updateCurrentMarkDisplay() {
