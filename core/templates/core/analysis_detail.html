@@ -306,6 +306,13 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         }
         volleys.push(currentVolley);
 
+        // Find AUT and TEL marks for first-volley cycle time reference
+        const phaseMark = sorted
+            .filter(m => {
+                const action = actionsById[m.action_id];
+                return action && (action.code === 'AUT' || action.code === 'TEL');
+            });
+
         return volleys.map((volley, index) => {
             const shots = volley.length;
             const successfulShots = volley.filter(m => !m.is_failure).length;
@@ -314,6 +321,36 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             const endTime = volley[volley.length - 1].time_seconds;
             const duration = endTime - startTime;
             const bps = duration > 0 ? (shots - 1) / duration : null;
+            let points = 0;
+            volley.forEach(m => {
+                if (!m.is_failure) {
+                    const action = actionsById[m.action_id];
+                    points += action.points * m.count;
+                }
+            });
+
+            let cycleTime = null;
+            if (index > 0) {
+                // Time from last shot of previous volley to end shot of this volley
+                const prevVolleyEnd = volleys[index - 1][volleys[index - 1].length - 1].time_seconds;
+                cycleTime = endTime - prevVolleyEnd;
+            } else {
+                // First volley: use nearest AUT or TEL mark
+                let nearest = null;
+                let nearestDist = Infinity;
+                phaseMark.forEach(m => {
+                    const dist = Math.abs(m.time_seconds - startTime);
+                    if (dist < nearestDist) {
+                        nearestDist = dist;
+                        nearest = m;
+                    }
+                });
+                if (nearest) {
+                    cycleTime = endTime - nearest.time_seconds;
+                }
+            }
+
+            const scorePerMin = (cycleTime !== null && cycleTime > 0) ? (points / cycleTime) * 60 : null;
 
             return {
                 index: index + 1,
@@ -323,7 +360,10 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                 startTime: startTime,
                 endTime: endTime,
                 duration: duration,
-                bps: bps
+                bps: bps,
+                points: points,
+                cycleTime: cycleTime,
+                scorePerMin: scorePerMin
             };
         });
     }
@@ -348,7 +388,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         const headerRow = document.createElement('tr');
         headerRow.style.cssText = 'text-align: left; border-bottom: 2px solid #ccc;';
 
-        ['#', 'Time Range', 'Shots', 'Success %', 'Balls/Sec'].forEach(label => {
+        ['#', 'Start', 'Duration', 'Shots', 'Success %', 'Balls/Sec', 'Cycle Time', 'Score/Min'].forEach(label => {
             const th = document.createElement('th');
             th.style.padding = '8px';
             th.textContent = label;
@@ -368,9 +408,13 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             indexTd.style.padding = '8px';
             indexTd.textContent = v.index;
 
-            const timeTd = document.createElement('td');
-            timeTd.style.cssText = 'padding: 8px; font-family: monospace;';
-            timeTd.textContent = formatTime(v.startTime) + ' \u2013 ' + formatTime(v.endTime);
+            const startTd = document.createElement('td');
+            startTd.style.cssText = 'padding: 8px; font-family: monospace;';
+            startTd.textContent = formatTime(v.startTime);
+
+            const durationTd = document.createElement('td');
+            durationTd.style.cssText = 'padding: 8px; font-family: monospace;';
+            durationTd.textContent = v.duration.toFixed(2) + 's';
 
             const shotsTd = document.createElement('td');
             shotsTd.style.padding = '8px';
@@ -384,11 +428,22 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             bpsTd.style.padding = '8px';
             bpsTd.textContent = v.bps !== null ? v.bps.toFixed(2) : 'N/A';
 
+            const cycleTd = document.createElement('td');
+            cycleTd.style.cssText = 'padding: 8px; font-family: monospace;';
+            cycleTd.textContent = v.cycleTime !== null ? v.cycleTime.toFixed(2) + 's' : 'N/A';
+
+            const spmTd = document.createElement('td');
+            spmTd.style.padding = '8px';
+            spmTd.textContent = v.scorePerMin !== null ? v.scorePerMin.toFixed(1) : 'N/A';
+
             tr.appendChild(indexTd);
-            tr.appendChild(timeTd);
+            tr.appendChild(startTd);
+            tr.appendChild(durationTd);
             tr.appendChild(shotsTd);
             tr.appendChild(successTd);
             tr.appendChild(bpsTd);
+            tr.appendChild(cycleTd);
+            tr.appendChild(spmTd);
 
             tbody.appendChild(tr);
         });
