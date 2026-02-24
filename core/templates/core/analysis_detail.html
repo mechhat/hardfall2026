@@ -50,6 +50,11 @@
     </div>
 </div>
 
+<div id="volleys-section" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
+    <h3 style="margin: 0 0 10px 0;">Volleys</h3>
+    <div id="volleys-container"></div>
+</div>
+
 <h2>Marks</h2>
 <table id="marks-table" style="width: 100%; border-collapse: collapse;">
     <thead>
@@ -73,11 +78,6 @@
 <div id="marks-summary" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
     <h3 style="margin: 0 0 10px 0;">Totals</h3>
     <div id="marks-totals" style="display: flex; flex-wrap: wrap; gap: 15px;"></div>
-</div>
-
-<div id="volleys-section" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
-    <h3 style="margin: 0 0 10px 0;">Volleys</h3>
-    <div id="volleys-container"></div>
 </div>
 
 <p style="margin-top: 20px;"><a href="{% url 'event_detail' analysis.event.id %}">&larr; Back to {{ analysis.event.name }}</a></p>
@@ -531,8 +531,18 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             indexTd.textContent = v.index;
 
             const startTd = document.createElement('td');
-            startTd.style.cssText = 'padding: 8px; font-family: monospace;';
-            startTd.textContent = formatTime(v.startTime);
+            startTd.style.cssText = 'padding: 8px;';
+            const startLink = document.createElement('a');
+            startLink.href = '#';
+            startLink.textContent = formatTime(v.startTime);
+            startLink.style.fontFamily = 'monospace';
+            startLink.addEventListener('click', (function(time) {
+                return function(e) {
+                    e.preventDefault();
+                    document.getElementById('video-player').currentTime = time;
+                };
+            })(v.startTime));
+            startTd.appendChild(startLink);
 
             const durationTd = document.createElement('td');
             durationTd.style.cssText = 'padding: 8px; font-family: monospace;';
