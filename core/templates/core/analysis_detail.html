@@ -225,18 +225,31 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         });
     }
 
+    function getActionButtonColor(action) {
+        if (action.code === 'SC') return { normal: '#e65100', hover: '#bf4400' };
+        if (action.code === 'TEL' || action.code === 'AUT') return { normal: '#6a1b9a', hover: '#561580' };
+        return { normal: '#0066cc', hover: '#0055aa' };
+    }
+
     function renderActionButtons() {
         const container = document.getElementById('action-buttons');
         container.innerHTML = '';
 
-        actions.forEach(action => {
+        const sorted = [...actions].sort((a, b) => {
+            if (a.code === 'SC') return -1;
+            if (b.code === 'SC') return 1;
+            return 0;
+        });
+
+        sorted.forEach(action => {
+            const colors = getActionButtonColor(action);
             const btn = document.createElement('button');
             btn.textContent = action.code;
             btn.title = action.name + ' (' + action.points + ' pts)';
-            btn.style.cssText = 'background: #0066cc; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;';
+            btn.style.cssText = 'background: ' + colors.normal + '; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;';
             btn.addEventListener('click', () => handleActionClick(action));
-            btn.addEventListener('mouseenter', () => btn.style.background = '#0055aa');
-            btn.addEventListener('mouseleave', () => btn.style.background = '#0066cc');
+            btn.addEventListener('mouseenter', () => btn.style.background = colors.hover);
+            btn.addEventListener('mouseleave', () => btn.style.background = colors.normal);
             container.appendChild(btn);
         });
     }
