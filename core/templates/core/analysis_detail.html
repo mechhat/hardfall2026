@@ -53,7 +53,7 @@
     <thead>
         <tr style="text-align: left; border-bottom: 2px solid #ccc;">
             <th style="padding: 8px;">Time</th>
-            <th style="padding: 8px;">Delta</th>
+            <th style="padding: 8px; text-align: right;">Delta</th>
             <th style="padding: 8px;">Action</th>
             <th style="padding: 8px;">Count</th>
             <th style="padding: 8px;">Failure</th>
@@ -167,9 +167,8 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             timeTd.appendChild(timeLink);
 
             const deltaTd = document.createElement('td');
-            deltaTd.style.padding = '8px';
-            deltaTd.style.fontFamily = 'monospace';
-            deltaTd.textContent = mark.delta_seconds.toFixed(2) + 's';
+            deltaTd.style.cssText = 'padding: 8px; font-family: monospace; text-align: right;';
+            deltaTd.textContent = mark.delta_seconds.toFixed(2);
 
             const actionTd = document.createElement('td');
             actionTd.style.padding = '8px';
