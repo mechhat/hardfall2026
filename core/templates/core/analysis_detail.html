@@ -17,6 +17,8 @@
     <span id="duration-display" style="font-family: monospace; min-width: 80px;">0:00.00</span>
 </div>
 
+<div id="timeline-bar" style="margin-top: 4px; max-width: 1280px; height: 24px; position: relative; border-radius: 4px; overflow: hidden; font-size: 11px; font-weight: bold; color: white; cursor: pointer;"></div>
+
 <div id="action-buttons" style="margin: 15px 0; display: flex; flex-wrap: wrap; gap: 8px;"></div>
 
 <div id="new-mark-controls" style="margin: 15px 0; padding: 10px; background: #f0f0f0; border-radius: 4px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
@@ -123,6 +125,106 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         return marks.find(m => Math.abs(m.time_seconds - timeSeconds) < 0.0001);
     }
 
+    const GAME_DURATION = 160;
+    let timelinePlayhead = null;
+    let timelineMarksLayer = null;
+
+    function findTelVideoTime() {
+        const telMark = marks.find(m => {
+            const action = actionsById[m.action_id];
+            return action && action.code === 'TEL';
+        });
+        return telMark ? telMark.time_seconds : null;
+    }
+
+    function getTimelineVideoStart() {
+        const telTime = findTelVideoTime();
+        if (telTime === null) return null;
+        return telTime - 20;
+    }
+
+    function videoTimeToTimelinePct(videoTime) {
+        const start = getTimelineVideoStart();
+        if (start === null) return null;
+        const gameTime = videoTime - start;
+        if (gameTime < 0 || gameTime > GAME_DURATION) return null;
+        return (gameTime / GAME_DURATION) * 100;
+    }
+
+    function timelinePctToVideoTime(pct) {
+        const start = getTimelineVideoStart();
+        if (start === null) return null;
+        return start + (pct / 100) * GAME_DURATION;
+    }
+
+    function renderTimelineBar() {
+        const container = document.getElementById('timeline-bar');
+        const phases = [
+            { label: 'AUTO', duration: 20, color: '#4CAF50' },
+            { label: 'TRANSITION', duration: 10, color: '#9E9E9E' },
+            { label: 'SHIFT 1', duration: 25, color: '#2196F3' },
+            { label: 'SHIFT 2', duration: 25, color: '#1976D2' },
+            { label: 'SHIFT 3', duration: 25, color: '#1565C0' },
+            { label: 'SHIFT 4', duration: 25, color: '#0D47A1' },
+            { label: 'END GAME', duration: 30, color: '#FF9800' },
+        ];
+
+        const phasesDiv = document.createElement('div');
+        phasesDiv.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex;';
+        phases.forEach(phase => {
+            const section = document.createElement('div');
+            const widthPct = (phase.duration / GAME_DURATION) * 100;
+            section.style.cssText = 'width: ' + widthPct + '%; background: ' + phase.color + '; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap;';
+            section.textContent = phase.label;
+            section.title = phase.label + ' (' + phase.duration + 's)';
+            phasesDiv.appendChild(section);
+        });
+        container.appendChild(phasesDiv);
+
+        timelineMarksLayer = document.createElement('div');
+        timelineMarksLayer.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 1;';
+        container.appendChild(timelineMarksLayer);
+
+        timelinePlayhead = document.createElement('div');
+        timelinePlayhead.style.cssText = 'position: absolute; top: 0; width: 1px; height: 100%; background: white; pointer-events: none; display: none; z-index: 2;';
+        container.appendChild(timelinePlayhead);
+
+        container.addEventListener('click', e => {
+            const start = getTimelineVideoStart();
+            if (start === null) return;
+            const rect = container.getBoundingClientRect();
+            const pct = ((e.clientX - rect.left) / rect.width) * 100;
+            const videoTime = timelinePctToVideoTime(pct);
+            if (videoTime !== null) {
+                document.getElementById('video-player').currentTime = videoTime;
+            }
+        });
+    }
+
+    function updateTimelinePlayhead() {
+        if (!timelinePlayhead) return;
+        const video = document.getElementById('video-player');
+        const pct = videoTimeToTimelinePct(video.currentTime);
+        if (pct !== null) {
+            timelinePlayhead.style.left = pct + '%';
+            timelinePlayhead.style.display = 'block';
+        } else {
+            timelinePlayhead.style.display = 'none';
+        }
+    }
+
+    function updateTimelineMarks() {
+        if (!timelineMarksLayer) return;
+        timelineMarksLayer.innerHTML = '';
+        marks.forEach(mark => {
+            const pct = videoTimeToTimelinePct(mark.time_seconds);
+            if (pct === null) return;
+            const el = document.createElement('div');
+            el.style.cssText = 'position: absolute; bottom: 0; width: 1px; height: 5px; background: white; left: ' + pct + '%;';
+            timelineMarksLayer.appendChild(el);
+        });
+    }
+
     function renderActionButtons() {
         const container = document.getElementById('action-buttons');
         container.innerHTML = '';
@@ -203,6 +305,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
         renderMarksTotals();
         renderVolleys();
+        updateTimelineMarks();
     }
 
     function renderMarksTotals() {
@@ -607,12 +710,15 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     }
 
     function init() {
+        renderTimelineBar();
         renderActionButtons();
         renderMarksTable();
 
         const video = document.getElementById('video-player');
         video.addEventListener('timeupdate', updateCurrentMarkDisplay);
+        video.addEventListener('timeupdate', updateTimelinePlayhead);
         video.addEventListener('seeked', updateCurrentMarkDisplay);
+        video.addEventListener('seeked', updateTimelinePlayhead);
         video.addEventListener('wheel', handleVideoWheel, { passive: false });
 
         // Keyboard shortcut: 's' to mark a score when hovering over video
