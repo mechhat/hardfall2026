@@ -289,9 +289,15 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     }
 
     function computeVolleys() {
-        if (marks.length === 0) return [];
+        // Only SC marks participate in volley grouping
+        const scMarks = marks.filter(m => {
+            const action = actionsById[m.action_id];
+            return action && action.code === 'SC';
+        });
 
-        const sorted = [...marks].sort((a, b) => a.time_seconds - b.time_seconds);
+        if (scMarks.length === 0) return [];
+
+        const sorted = [...scMarks].sort((a, b) => a.time_seconds - b.time_seconds);
         const volleys = [];
         let currentVolley = [sorted[0]];
 
@@ -307,7 +313,8 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         volleys.push(currentVolley);
 
         // Find AUT and TEL marks for first-volley cycle time reference
-        const phaseMark = sorted
+        const allSorted = [...marks].sort((a, b) => a.time_seconds - b.time_seconds);
+        const phaseMark = allSorted
             .filter(m => {
                 const action = actionsById[m.action_id];
                 return action && (action.code === 'AUT' || action.code === 'TEL');
