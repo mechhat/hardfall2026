@@ -57,7 +57,7 @@
             <th style="padding: 8px;">Action</th>
             <th style="padding: 8px;">Count</th>
             <th style="padding: 8px;">Failure</th>
-            <th style="padding: 8px;">Points</th>
+            <!-- <th style="padding: 8px;">Points</th> -->
         </tr>
     </thead>
     <tbody id="marks-body"></tbody>
@@ -149,7 +149,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
         marks.forEach((mark, index) => {
             const action = actionsById[mark.action_id];
-            const points = mark.is_failure ? 0 : action.points * mark.count;
+            // const points = mark.is_failure ? 0 : action.points * mark.count;
 
             const tr = document.createElement('tr');
             tr.style.borderBottom = '1px solid #eee';
@@ -186,18 +186,18 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                 failureTd.style.color = '#cc0000';
             }
 
-            const pointsTd = document.createElement('td');
-            pointsTd.style.padding = '8px';
-            if (points > 0) {
-                pointsTd.textContent = points;
-            }
+            // const pointsTd = document.createElement('td');
+            // pointsTd.style.padding = '8px';
+            // if (points > 0) {
+            //     pointsTd.textContent = points;
+            // }
 
             tr.appendChild(timeTd);
             tr.appendChild(deltaTd);
             tr.appendChild(actionTd);
             tr.appendChild(countTd);
             tr.appendChild(failureTd);
-            tr.appendChild(pointsTd);
+            // tr.appendChild(pointsTd);
 
             tbody.appendChild(tr);
         });
