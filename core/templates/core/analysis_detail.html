@@ -99,6 +99,8 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     const actionsById = {};
     let currentMarkRef = null;
     let videoEl = null;
+    let hasUnsavedChanges = false;
+    let isLeavingPage = false;
 
     actions.forEach(action => {
         actionsById[action.id] = action;
@@ -573,6 +575,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     function handleCurrentMarkFailureChange() {
         if (currentMarkRef) {
             currentMarkRef.is_failure = document.getElementById('current-failure-toggle').checked;
+            hasUnsavedChanges = true;
             renderMarksTable();
         }
     }
@@ -580,6 +583,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     function handleCurrentMarkCountChange() {
         if (currentMarkRef) {
             currentMarkRef.count = parseInt(document.getElementById('current-count-input').value) || 1;
+            hasUnsavedChanges = true;
             renderMarksTable();
         }
     }
@@ -591,6 +595,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                 marks.splice(index, 1);
                 currentMarkRef = null;
                 document.getElementById('current-mark-display').style.display = 'none';
+                hasUnsavedChanges = true;
                 renderMarksTable();
             }
         }
@@ -620,6 +625,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             });
         }
 
+        hasUnsavedChanges = true;
         renderMarksTable();
         updateCurrentMarkDisplay();
     }
@@ -654,6 +660,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
             if (data.success) {
                 marks = data.marks;
+                hasUnsavedChanges = false;
                 renderMarksTable();
                 updateCurrentMarkDisplay();
                 statusSpan.textContent = 'Saved!';
@@ -737,6 +744,18 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                     handleActionClick(scoreAction);
                 }
             }
+
+            if (e.key === 'l' || e.key === 'L') {
+                e.preventDefault();
+                // Jump to the last marked frame
+                if (marks.length > 0) {
+                    const lastMark = marks.reduce((latest, mark) => 
+                        mark.time_seconds > latest.time_seconds ? mark : latest
+                    );
+                    video.currentTime = lastMark.time_seconds;
+                    video.focus();
+                }
+            }
         });
 
         // Force first frame to render (some browsers show black until played/seeked)
@@ -784,6 +803,15 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         document.getElementById('current-count-input').addEventListener('change', handleCurrentMarkCountChange);
         document.getElementById('delete-mark-btn').addEventListener('click', handleDeleteCurrentMark);
         document.getElementById('save-btn').addEventListener('click', handleSave);
+
+        // Warn if unsaved changes when leaving
+        window.addEventListener('beforeunload', (e) => {
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = '';
+                return '';
+            }
+        });
     }
 
     init();
