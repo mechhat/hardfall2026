@@ -5,10 +5,13 @@
 {% block content %}
 <h1>{{ analysis.team }} - {{ analysis.match }}</h1>
 
-<video id="video-player" width="100%" style="max-width: 1280px; max-height: 70vh;">
-    <source src="{% url 'video_serve' analysis.video.id %}" type="video/mp4">
-    Your browser does not support the video tag.
-</video>
+<div id="video-container" style="position: relative; display: inline-block; max-width: 1280px; width: 100%;">
+    <video id="video-player" width="100%" style="max-height: 70vh;">
+        <source src="{% url 'video_serve' analysis.video.id %}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+    <div id="mark-overlay" style="display: none; position: absolute; top: 0; right: 0; min-width: 100px; height: 100px; color: white; font-weight: bold; font-size: 18px; pointer-events: none; text-align: center; line-height: 100px;"></div>
+</div>
 
 <div id="video-controls" style="margin-top: 8px; display: flex; align-items: center; gap: 10px; max-width: 1280px;">
     <button id="play-pause-btn" style="width: 60px;">Play</button>
@@ -64,7 +67,6 @@
             <th style="padding: 8px;">Action</th>
             <th style="padding: 8px;">Count</th>
             <th style="padding: 8px;">Failure</th>
-            <!-- <th style="padding: 8px;">Points</th> -->
         </tr>
     </thead>
     <tbody id="marks-body"></tbody>
@@ -96,6 +98,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     const actions = window.ACTIONS;
     const actionsById = {};
     let currentMarkRef = null;
+    let videoEl = null;
 
     actions.forEach(action => {
         actionsById[action.id] = action;
@@ -123,6 +126,25 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
     function findMarkAtTime(timeSeconds) {
         return marks.find(m => Math.abs(m.time_seconds - timeSeconds) < 0.0001);
+    }
+
+    function createTd(text, style) {
+        const td = document.createElement('td');
+        td.style.cssText = style || 'padding: 8px;';
+        td.textContent = text;
+        return td;
+    }
+
+    function createTimeLink(seconds) {
+        const a = document.createElement('a');
+        a.href = '#';
+        a.textContent = formatTime(seconds);
+        a.style.fontFamily = 'monospace';
+        a.addEventListener('click', (e) => {
+            e.preventDefault();
+            videoEl.currentTime = seconds;
+        });
+        return a;
     }
 
     const GAME_DURATION = 163;
@@ -196,15 +218,14 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             const pct = ((e.clientX - rect.left) / rect.width) * 100;
             const videoTime = timelinePctToVideoTime(pct);
             if (videoTime !== null) {
-                document.getElementById('video-player').currentTime = videoTime;
+                videoEl.currentTime = videoTime;
             }
         });
     }
 
     function updateTimelinePlayhead() {
         if (!timelinePlayhead) return;
-        const video = document.getElementById('video-player');
-        const pct = videoTimeToTimelinePct(video.currentTime);
+        const pct = videoTimeToTimelinePct(videoEl.currentTime);
         if (pct !== null) {
             timelinePlayhead.style.left = pct + '%';
             timelinePlayhead.style.display = 'block';
@@ -264,54 +285,24 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
         marks.forEach((mark, index) => {
             const action = actionsById[mark.action_id];
-            // const points = mark.is_failure ? 0 : action.points * mark.count;
 
             const tr = document.createElement('tr');
             tr.style.borderBottom = '1px solid #eee';
 
-            const timeTd = document.createElement('td');
-            timeTd.style.padding = '8px';
-            const timeLink = document.createElement('a');
-            timeLink.href = '#';
-            timeLink.textContent = formatTime(mark.time_seconds);
-            timeLink.style.fontFamily = 'monospace';
-            timeLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                document.getElementById('video-player').currentTime = mark.time_seconds;
-            });
-            timeTd.appendChild(timeLink);
+            const timeTd = createTd('', 'padding: 8px;');
+            timeTd.appendChild(createTimeLink(mark.time_seconds));
 
-            const deltaTd = document.createElement('td');
-            deltaTd.style.cssText = 'padding: 8px; font-family: monospace; text-align: right;';
-            deltaTd.textContent = mark.delta_seconds.toFixed(2);
-
-            const actionTd = document.createElement('td');
-            actionTd.style.padding = '8px';
-            actionTd.textContent = action.code;
-
-            const countTd = document.createElement('td');
-            countTd.style.padding = '8px';
-            countTd.textContent = mark.count;
-
-            const failureTd = document.createElement('td');
-            failureTd.style.padding = '8px';
+            const failureTd = createTd('', 'padding: 8px;');
             if (mark.is_failure) {
                 failureTd.textContent = 'Yes';
                 failureTd.style.color = '#cc0000';
             }
 
-            // const pointsTd = document.createElement('td');
-            // pointsTd.style.padding = '8px';
-            // if (points > 0) {
-            //     pointsTd.textContent = points;
-            // }
-
             tr.appendChild(timeTd);
-            tr.appendChild(deltaTd);
-            tr.appendChild(actionTd);
-            tr.appendChild(countTd);
+            tr.appendChild(createTd(mark.delta_seconds.toFixed(2), 'padding: 8px; font-family: monospace; text-align: right;'));
+            tr.appendChild(createTd(action.code));
+            tr.appendChild(createTd(mark.count));
             tr.appendChild(failureTd);
-            // tr.appendChild(pointsTd);
 
             tbody.appendChild(tr);
         });
@@ -526,56 +517,17 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             const tr = document.createElement('tr');
             tr.style.borderBottom = '1px solid #eee';
 
-            const indexTd = document.createElement('td');
-            indexTd.style.padding = '8px';
-            indexTd.textContent = v.index;
+            const startTd = createTd('', 'padding: 8px;');
+            startTd.appendChild(createTimeLink(v.startTime));
 
-            const startTd = document.createElement('td');
-            startTd.style.cssText = 'padding: 8px;';
-            const startLink = document.createElement('a');
-            startLink.href = '#';
-            startLink.textContent = formatTime(v.startTime);
-            startLink.style.fontFamily = 'monospace';
-            startLink.addEventListener('click', (function(time) {
-                return function(e) {
-                    e.preventDefault();
-                    document.getElementById('video-player').currentTime = time;
-                };
-            })(v.startTime));
-            startTd.appendChild(startLink);
-
-            const durationTd = document.createElement('td');
-            durationTd.style.cssText = 'padding: 8px; font-family: monospace;';
-            durationTd.textContent = v.duration.toFixed(2) + 's';
-
-            const shotsTd = document.createElement('td');
-            shotsTd.style.padding = '8px';
-            shotsTd.textContent = v.shots + ' (' + v.successfulShots + ' ok)';
-
-            const successTd = document.createElement('td');
-            successTd.style.padding = '8px';
-            successTd.textContent = v.successPct.toFixed(0) + '%';
-
-            const bpsTd = document.createElement('td');
-            bpsTd.style.padding = '8px';
-            bpsTd.textContent = v.bps !== null ? v.bps.toFixed(2) : 'N/A';
-
-            const cycleTd = document.createElement('td');
-            cycleTd.style.cssText = 'padding: 8px; font-family: monospace;';
-            cycleTd.textContent = v.cycleTime !== null ? v.cycleTime.toFixed(2) + 's' : 'N/A';
-
-            const spmTd = document.createElement('td');
-            spmTd.style.padding = '8px';
-            spmTd.textContent = v.scorePerMin !== null ? v.scorePerMin.toFixed(1) : 'N/A';
-
-            tr.appendChild(indexTd);
+            tr.appendChild(createTd(v.index));
             tr.appendChild(startTd);
-            tr.appendChild(durationTd);
-            tr.appendChild(shotsTd);
-            tr.appendChild(successTd);
-            tr.appendChild(bpsTd);
-            tr.appendChild(cycleTd);
-            tr.appendChild(spmTd);
+            tr.appendChild(createTd(v.duration.toFixed(2) + 's', 'padding: 8px; font-family: monospace;'));
+            tr.appendChild(createTd(v.shots + ' (' + v.successfulShots + ' ok)'));
+            tr.appendChild(createTd(v.successPct.toFixed(0) + '%'));
+            tr.appendChild(createTd(v.bps !== null ? v.bps.toFixed(2) : 'N/A'));
+            tr.appendChild(createTd(v.cycleTime !== null ? v.cycleTime.toFixed(2) + 's' : 'N/A', 'padding: 8px; font-family: monospace;'));
+            tr.appendChild(createTd(v.scorePerMin !== null ? v.scorePerMin.toFixed(1) : 'N/A'));
 
             tbody.appendChild(tr);
         });
@@ -584,9 +536,23 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         container.appendChild(table);
     }
 
+    function updateMarkOverlay() {
+        const overlay = document.getElementById('mark-overlay');
+        const mark = findMarkAtTime(videoEl.currentTime);
+
+        if (mark) {
+            const action = actionsById[mark.action_id];
+            const colors = getActionButtonColor(action);
+            overlay.style.background = colors.normal;
+            overlay.textContent = action.code;
+            overlay.style.display = 'block';
+        } else {
+            overlay.style.display = 'none';
+        }
+    }
+
     function updateCurrentMarkDisplay() {
-        const video = document.getElementById('video-player');
-        const currentTime = video.currentTime;
+        const currentTime = videoEl.currentTime;
         const display = document.getElementById('current-mark-display');
         const mark = findMarkAtTime(currentTime);
 
@@ -631,8 +597,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     }
 
     function handleActionClick(action) {
-        const video = document.getElementById('video-player');
-        const currentTime = video.currentTime;
+        const currentTime = videoEl.currentTime;
         const isFailure = document.getElementById('new-failure-toggle').checked;
         const count = parseInt(document.getElementById('new-count-input').value) || 1;
 
@@ -705,10 +670,9 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
     function handleVideoWheel(e) {
         e.preventDefault();
-        const video = document.getElementById('video-player');
 
-        if (!video.paused) {
-            video.pause();
+        if (!videoEl.paused) {
+            videoEl.pause();
         }
 
         // Normalize wheel delta across browsers
@@ -728,26 +692,30 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         // Exponential: larger scrolls move much faster
         const scaledDelta = sign * Math.pow(absDelta / 50, 1.5) * 0.1;
 
-        const newTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + scaledDelta));
-        video.currentTime = newTime;
+        const newTime = Math.max(0, Math.min(videoEl.duration || 0, videoEl.currentTime + scaledDelta));
+        videoEl.currentTime = newTime;
     }
 
     function init() {
+        videoEl = document.getElementById('video-player');
+
         renderTimelineBar();
         renderActionButtons();
         renderMarksTable();
 
-        const video = document.getElementById('video-player');
-        video.addEventListener('timeupdate', updateCurrentMarkDisplay);
-        video.addEventListener('timeupdate', updateTimelinePlayhead);
-        video.addEventListener('seeked', updateCurrentMarkDisplay);
-        video.addEventListener('seeked', updateTimelinePlayhead);
-        video.addEventListener('wheel', handleVideoWheel, { passive: false });
+        function onVideoTimeChange() {
+            updateCurrentMarkDisplay();
+            updateTimelinePlayhead();
+            updateMarkOverlay();
+        }
+        videoEl.addEventListener('timeupdate', onVideoTimeChange);
+        videoEl.addEventListener('seeked', onVideoTimeChange);
+        videoEl.addEventListener('wheel', handleVideoWheel, { passive: false });
 
         // Keyboard shortcut: 's' to mark a score when hovering over video
         let isHoveringVideo = false;
-        video.addEventListener('mouseenter', () => { isHoveringVideo = true; });
-        video.addEventListener('mouseleave', () => { isHoveringVideo = false; });
+        videoEl.addEventListener('mouseenter', () => { isHoveringVideo = true; });
+        videoEl.addEventListener('mouseleave', () => { isHoveringVideo = false; });
 
         document.addEventListener('keydown', (e) => {
             if (!isHoveringVideo) return;
@@ -755,7 +723,6 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
             if (e.key === 's' || e.key === 'S') {
                 e.preventDefault();
-                // Find the "SC" (Score) action
                 const scoreAction = actions.find(a => a.code === 'SC');
                 if (scoreAction) {
                     handleActionClick(scoreAction);
@@ -764,12 +731,12 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         });
 
         // Force first frame to render (some browsers show black until played/seeked)
-        video.addEventListener('loadedmetadata', () => {
-            if (video.currentTime === 0) {
-                video.currentTime = 0.001;
+        videoEl.addEventListener('loadedmetadata', () => {
+            if (videoEl.currentTime === 0) {
+                videoEl.currentTime = 0.001;
             }
-            document.getElementById('duration-display').textContent = formatTime(video.duration);
-            document.getElementById('seek-bar').max = video.duration;
+            document.getElementById('duration-display').textContent = formatTime(videoEl.duration);
+            document.getElementById('seek-bar').max = videoEl.duration;
         });
 
         // Custom controls
@@ -778,30 +745,30 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         const currentTimeDisplay = document.getElementById('current-time-display');
 
         playPauseBtn.addEventListener('click', () => {
-            if (video.paused) {
-                video.play();
+            if (videoEl.paused) {
+                videoEl.play();
             } else {
-                video.pause();
+                videoEl.pause();
             }
         });
 
-        video.addEventListener('play', () => {
+        videoEl.addEventListener('play', () => {
             playPauseBtn.textContent = 'Pause';
         });
 
-        video.addEventListener('pause', () => {
+        videoEl.addEventListener('pause', () => {
             playPauseBtn.textContent = 'Play';
         });
 
-        video.addEventListener('timeupdate', () => {
-            currentTimeDisplay.textContent = formatTime(video.currentTime);
+        videoEl.addEventListener('timeupdate', () => {
+            currentTimeDisplay.textContent = formatTime(videoEl.currentTime);
             if (!seekBar.matches(':active')) {
-                seekBar.value = video.currentTime;
+                seekBar.value = videoEl.currentTime;
             }
         });
 
         seekBar.addEventListener('input', () => {
-            video.currentTime = parseFloat(seekBar.value);
+            videoEl.currentTime = parseFloat(seekBar.value);
         });
 
         document.getElementById('current-failure-toggle').addEventListener('change', handleCurrentMarkFailureChange);
