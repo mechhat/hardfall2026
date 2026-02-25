@@ -756,13 +756,22 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
             if (e.key === 'l' || e.key === 'L') {
                 e.preventDefault();
-                // Jump to the last marked frame
+                console.log('L pressed, current time:', videoEl.currentTime, 'marks:', marks);
+                // Jump to the last marked frame BEFORE current position
                 if (marks.length > 0) {
-                    const lastMark = marks.reduce((latest, mark) => 
-                        mark.time_seconds > latest.time_seconds ? mark : latest
-                    );
-                    video.currentTime = lastMark.time_seconds;
-                    video.focus();
+                    const currentTime = videoEl.currentTime;
+                    const marksBeforeCurrent = marks.filter(m => m.time_seconds < currentTime);
+                    console.log('marks before current:', marksBeforeCurrent);
+                    if (marksBeforeCurrent.length > 0) {
+                        const lastMarkBefore = marksBeforeCurrent.reduce((latest, mark) => 
+                            mark.time_seconds > latest.time_seconds ? mark : latest
+                        );
+                        console.log('jumping to:', lastMarkBefore.time_seconds);
+                        videoEl.currentTime = lastMarkBefore.time_seconds;
+                    } else {
+                        console.log('no marks before current position');
+                    }
+                    videoEl.focus();
                 }
             }
         });
