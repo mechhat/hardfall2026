@@ -755,6 +755,14 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                 }
             }
 
+            if (e.key === 'p' || e.key === 'P') {
+                e.preventDefault();
+                const passAction = actions.find(a => a.code === 'PS');
+                if (passAction) {
+                    handleActionClick(passAction);
+                }
+            }
+
             if (e.key === 'l' || e.key === 'L') {
                 e.preventDefault();
                 console.log('L pressed, current time:', videoEl.currentTime, 'marks:', marks);
