@@ -83,6 +83,7 @@
 </div>
 
 <p style="margin-top: 20px;"><a href="{% url 'event_detail' analysis.event.id %}">&larr; Back to {{ analysis.event.name }}</a></p>
+<p><a href="{% url 'video_detail' analysis.video.id %}" style="font-size: 13px;">New analysis from video</a></p>
 
 <script>
 window.ANALYSIS_ID = {{ analysis.id }};
