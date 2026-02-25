@@ -694,6 +694,15 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
         const newTime = Math.max(0, Math.min(videoEl.duration || 0, videoEl.currentTime + scaledDelta));
         videoEl.currentTime = newTime;
+
+        // Explicitly update UI since timeupdate/seeked may not fire for small scrubs
+        updateCurrentMarkDisplay();
+        updateMarkOverlay();
+        updateTimelinePlayhead();
+
+        // Update time display and seek bar
+        document.getElementById('current-time-display').textContent = formatTime(newTime);
+        document.getElementById('seek-bar').value = newTime;
     }
 
     function init() {
