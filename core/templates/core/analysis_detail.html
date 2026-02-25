@@ -127,7 +127,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     }
 
     function findMarkAtTime(timeSeconds) {
-        return marks.find(m => Math.abs(m.time_seconds - timeSeconds) < 0.0001);
+        return marks.find(m => Math.abs(m.time_seconds - timeSeconds) < 0.017);
     }
 
     function createTd(text, style) {
@@ -719,7 +719,10 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         renderActionButtons();
         renderMarksTable();
 
+        let lastUpdatedTime = -1;
+
         function onVideoTimeChange() {
+            lastUpdatedTime = videoEl.currentTime;
             updateCurrentMarkDisplay();
             updateTimelinePlayhead();
             updateMarkOverlay();
@@ -727,6 +730,12 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         videoEl.addEventListener('timeupdate', onVideoTimeChange);
         videoEl.addEventListener('seeked', onVideoTimeChange);
         videoEl.addEventListener('wheel', handleVideoWheel, { passive: false });
+
+        setInterval(() => {
+            if (videoEl.currentTime !== lastUpdatedTime) {
+                onVideoTimeChange();
+            }
+        }, 50);
 
         // Keyboard shortcut: 's' to mark a score when hovering over video
         let isHoveringVideo = false;
