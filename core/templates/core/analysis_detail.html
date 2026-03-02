@@ -102,6 +102,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     let videoEl = null;
     let hasUnsavedChanges = false;
     let isLeavingPage = false;
+    let frameDuration = null;
 
     actions.forEach(action => {
         actionsById[action.id] = action;
@@ -772,6 +773,24 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                 }
             }
 
+            if (e.key === ',' || e.key === '.') {
+                e.preventDefault();
+                if (!videoEl.paused) {
+                    videoEl.pause();
+                }
+                const step = frameDuration || (1 / 30);
+                if (e.key === ',') {
+                    videoEl.currentTime = Math.max(0, videoEl.currentTime - step);
+                } else {
+                    videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + step);
+                }
+                updateCurrentMarkDisplay();
+                updateMarkOverlay();
+                updateTimelinePlayhead();
+                document.getElementById('current-time-display').textContent = formatTime(videoEl.currentTime);
+                document.getElementById('seek-bar').value = videoEl.currentTime;
+            }
+
             if (e.key === 'l' || e.key === 'L') {
                 e.preventDefault();
                 console.log('L pressed, current time:', videoEl.currentTime, 'marks:', marks);
@@ -793,6 +812,26 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                 }
             }
         });
+
+        // Detect actual frame rate using requestVideoFrameCallback
+        function detectFrameRate() {
+            if (frameDuration !== null) return;
+            let prevMediaTime = null;
+            function onFrame(now, metadata) {
+                if (prevMediaTime === null) {
+                    prevMediaTime = metadata.mediaTime;
+                    videoEl.requestVideoFrameCallback(onFrame);
+                } else {
+                    const diff = metadata.mediaTime - prevMediaTime;
+                    if (diff > 0) {
+                        frameDuration = diff;
+                    }
+                }
+            }
+            videoEl.requestVideoFrameCallback(onFrame);
+        }
+
+        videoEl.addEventListener('play', detectFrameRate);
 
         // Force first frame to render (some browsers show black until played/seeked)
         videoEl.addEventListener('loadedmetadata', () => {
