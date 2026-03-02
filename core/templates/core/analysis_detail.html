@@ -747,6 +747,15 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             if (!isHoveringVideo) return;
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
+            if (e.key === ' ') {
+                e.preventDefault();
+                if (videoEl.paused) {
+                    videoEl.play();
+                } else {
+                    videoEl.pause();
+                }
+            }
+
             if (e.key === 's' || e.key === 'S') {
                 e.preventDefault();
                 const scoreAction = actions.find(a => a.code === 'SC');
