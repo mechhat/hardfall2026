@@ -83,6 +83,11 @@
     <div id="marks-totals" style="display: flex; flex-wrap: wrap; gap: 15px;"></div>
 </div>
 
+<div id="segment-info" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px; display: none;">
+    <h3 style="margin: 0 0 10px 0;">Segment</h3>
+    <pre id="segment-json" style="margin: 0; font-family: monospace; white-space: pre-wrap;"></pre>
+</div>
+
 <p style="margin-top: 20px;"><a href="{% url 'event_detail' analysis.event.id %}">&larr; Back to {{ analysis.event.name }}</a></p>
 <p><a href="{% url 'video_detail' analysis.video.id %}" style="font-size: 13px;">New analysis from video</a></p>
 
@@ -722,6 +727,19 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         document.getElementById('seek-bar').value = newTime;
     }
 
+    function updateSegmentInfo() {
+        var container = document.getElementById('segment-info');
+        var pre = document.getElementById('segment-json');
+        var data = {
+            in: segmentIn,
+            out: segmentOut,
+            centerX: segmentCenterX,
+            centerY: segmentCenterY
+        };
+        pre.textContent = JSON.stringify(data, null, 2);
+        container.style.display = 'block';
+    }
+
     function updateSegmentRect() {
         const rect = document.getElementById('segment-rect');
         if (segmentCenterX === null || segmentIn === null || segmentOut === null) {
@@ -872,12 +890,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                 e.preventDefault();
                 segmentCenterX = Math.round(mouseVideoX);
                 segmentCenterY = Math.round(mouseVideoY);
-                console.log(JSON.stringify({
-                    in: segmentIn,
-                    out: segmentOut,
-                    centerX: segmentCenterX,
-                    centerY: segmentCenterY
-                }));
+                updateSegmentInfo();
                 updateSegmentRect();
             }
         });
