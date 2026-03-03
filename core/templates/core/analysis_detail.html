@@ -11,6 +11,7 @@
         Your browser does not support the video tag.
     </video>
     <div id="mark-overlay" style="display: none; position: absolute; top: 0; right: 0; min-width: 100px; height: 40px; color: white; font-weight: bold; font-size: 18px; pointer-events: none; text-align: center; line-height: 40px;"></div>
+    <div id="segment-rect" style="display: none; position: absolute; border: 2px solid lime; pointer-events: none; box-sizing: border-box;"></div>
 </div>
 
 <div id="video-controls" style="margin-top: 8px; display: flex; align-items: center; gap: 10px; max-width: 1280px;">
@@ -103,6 +104,12 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     let hasUnsavedChanges = false;
     let isLeavingPage = false;
     let frameDuration = null;
+    let segmentIn = null;
+    let segmentOut = null;
+    let segmentCenterX = null;
+    let segmentCenterY = null;
+    let mouseVideoX = 0;
+    let mouseVideoY = 0;
 
     actions.forEach(action => {
         actionsById[action.id] = action;
@@ -708,10 +715,35 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         updateCurrentMarkDisplay();
         updateMarkOverlay();
         updateTimelinePlayhead();
+        updateSegmentRect();
 
         // Update time display and seek bar
         document.getElementById('current-time-display').textContent = formatTime(newTime);
         document.getElementById('seek-bar').value = newTime;
+    }
+
+    function updateSegmentRect() {
+        const rect = document.getElementById('segment-rect');
+        if (segmentCenterX === null || segmentIn === null || segmentOut === null) {
+            rect.style.display = 'none';
+            return;
+        }
+        const t = videoEl.currentTime;
+        if (t >= segmentIn && t <= segmentOut) {
+            const scaleX = videoEl.clientWidth / videoEl.videoWidth;
+            const scaleY = videoEl.clientHeight / videoEl.videoHeight;
+            const w = 640 * scaleX;
+            const h = 480 * scaleY;
+            const cx = segmentCenterX * scaleX;
+            const cy = segmentCenterY * scaleY;
+            rect.style.left = (cx - w / 2) + 'px';
+            rect.style.top = (cy - h / 2) + 'px';
+            rect.style.width = w + 'px';
+            rect.style.height = h + 'px';
+            rect.style.display = 'block';
+        } else {
+            rect.style.display = 'none';
+        }
     }
 
     function init() {
@@ -728,10 +760,19 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             updateCurrentMarkDisplay();
             updateTimelinePlayhead();
             updateMarkOverlay();
+            updateSegmentRect();
         }
         videoEl.addEventListener('timeupdate', onVideoTimeChange);
         videoEl.addEventListener('seeked', onVideoTimeChange);
         videoEl.addEventListener('wheel', handleVideoWheel, { passive: false });
+
+        videoEl.addEventListener('mousemove', (e) => {
+            const rect = videoEl.getBoundingClientRect();
+            const sx = e.clientX - rect.left;
+            const sy = e.clientY - rect.top;
+            mouseVideoX = (sx / videoEl.clientWidth) * videoEl.videoWidth;
+            mouseVideoY = (sy / videoEl.clientHeight) * videoEl.videoHeight;
+        });
 
         setInterval(() => {
             if (videoEl.currentTime !== lastUpdatedTime) {
@@ -787,6 +828,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                 updateCurrentMarkDisplay();
                 updateMarkOverlay();
                 updateTimelinePlayhead();
+                updateSegmentRect();
                 document.getElementById('current-time-display').textContent = formatTime(videoEl.currentTime);
                 document.getElementById('seek-bar').value = videoEl.currentTime;
             }
@@ -800,7 +842,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                     const marksBeforeCurrent = marks.filter(m => m.time_seconds < currentTime);
                     console.log('marks before current:', marksBeforeCurrent);
                     if (marksBeforeCurrent.length > 0) {
-                        const lastMarkBefore = marksBeforeCurrent.reduce((latest, mark) => 
+                        const lastMarkBefore = marksBeforeCurrent.reduce((latest, mark) =>
                             mark.time_seconds > latest.time_seconds ? mark : latest
                         );
                         console.log('jumping to:', lastMarkBefore.time_seconds);
@@ -810,6 +852,33 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                     }
                     videoEl.focus();
                 }
+            }
+
+            if (e.key === 'i') {
+                e.preventDefault();
+                segmentIn = videoEl.currentTime;
+                console.log('Segment IN set to', segmentIn);
+                updateSegmentRect();
+            }
+
+            if (e.key === 'o') {
+                e.preventDefault();
+                segmentOut = videoEl.currentTime;
+                console.log('Segment OUT set to', segmentOut);
+                updateSegmentRect();
+            }
+
+            if (e.key === 'u') {
+                e.preventDefault();
+                segmentCenterX = Math.round(mouseVideoX);
+                segmentCenterY = Math.round(mouseVideoY);
+                console.log(JSON.stringify({
+                    in: segmentIn,
+                    out: segmentOut,
+                    centerX: segmentCenterX,
+                    centerY: segmentCenterY
+                }));
+                updateSegmentRect();
             }
         });
 
