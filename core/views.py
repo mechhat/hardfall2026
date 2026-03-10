@@ -67,15 +67,14 @@ def _natural_sort_key(s):
     """Key for natural sort: numbers compare numerically. 'M3' < 'M10'."""
     def atomize(text):
         parts = re.split(r'(\d+)', str(text))
-        return [int(p) if p.isdigit() else p.lower() for p in parts if p]
+        return [(0, int(p)) if p.isdigit() else (1, p.lower()) for p in parts if p]
     return atomize(s or '')
-
 
 def _analysis_sort_key(analysis):
     """Order: P first, then Q, then O, then F, then rest alphabetically. Numeric within."""
     match = analysis.match or ''
     first = (match[0].upper() if match else '')
-    prefix = {'P': 0, 'Q': 1, 'O': 2, 'F': 3}.get(first, 4)
+    prefix = {'C': 1, 'P': 2, 'Q': 3, 'S': 4, 'F': 5}.get(first, 0)
     return (prefix, _natural_sort_key(match))
 
 
@@ -97,7 +96,7 @@ def event_create(request):
 
 def event_detail(request, event_id):
     event = get_object_or_404(Event, pk=event_id)
-    analyses = sorted(event.analyses.all(), key=_analysis_sort_key)
+    analyses = sorted(event.analyses.all(), key=_analysis_sort_key, reverse=True)
 
     # Videos linked to an analysis for this event
     linked_video_ids = [a.video_id for a in analyses]
