@@ -67,15 +67,9 @@
 })();
 </script>
 
-<h2>Analyses</h2>
 {% if analyses %}
-<ul class="item-list">
-    {% for analysis in analyses %}
-    <li>
-        <a href="{% url 'analysis_detail' analysis.id %}">{{ analysis.match }} :: {{ analysis.team }}</a>
-    </li>
-    {% endfor %}
-</ul>
+<h2>Analyses</h2>
+<div id="mark-timelines-container"></div>
 {% else %}
 <p>No analyses yet.</p>
 {% endif %}
@@ -91,13 +85,6 @@
 </ul>
 {% endif %}
 
-{% if analyses %}
-<div id="mark-timelines-section" style="margin-top: 30px; padding: 20px; background: #f5f5f5; border-radius: 4px;">
-    <h2>Mark Timelines by Robot</h2>
-    <div id="mark-timelines-container"></div>
-</div>
-{% endif %}
-
 <p><a href="{% url 'event_list' %}">&larr; Back to events</a></p>
 
 <script src="{% static 'core/timeline.js' %}"></script>
@@ -111,13 +98,17 @@
     const container = document.getElementById('mark-timelines-container');
     if (!container) return;
 
+    const teamOrder = [];
     const byTeam = {};
     analysesData.forEach(function(a) {
-        if (!byTeam[a.team]) byTeam[a.team] = [];
+        if (!byTeam[a.team]) {
+            byTeam[a.team] = [];
+            teamOrder.push(a.team);
+        }
         byTeam[a.team].push(a);
     });
 
-    Object.keys(byTeam).sort().forEach(function(team) {
+    teamOrder.forEach(function(team) {
         const teamSection = document.createElement('div');
         teamSection.style.cssText = 'margin-bottom: 25px;';
         const teamHeading = document.createElement('h3');

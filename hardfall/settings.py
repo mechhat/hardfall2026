@@ -119,3 +119,6 @@ STATIC_URL = 'static/'
 
 # Video uploads
 VIDEOS_ROOT = BASE_DIR / 'videos'
+
+# Our team number for sorting priority
+OUR_TEAM = "2724"

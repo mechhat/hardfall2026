@@ -115,6 +115,9 @@ def event_detail(request, event_id):
             'marks': marks_data,
         })
 
+    our_team = settings.OUR_TEAM
+    analyses_data.sort(key=lambda a: (0 if a['team'] == our_team else 1, a['team']))
+
     actions_data = [
         {'id': a.id, 'code': a.code, 'name': a.name, 'points': a.points}
         for a in Action.objects.all()
