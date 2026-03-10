@@ -7,6 +7,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
 
@@ -64,10 +65,18 @@ def _validate_video_file(file_content):
 
 
 def _natural_sort_key(s):
-    """Key for natural sort: numbers compare numerically. 'M3' < 'M10'."""
+    """Key for natural sort: numbers compare numerically. 'M3' < 'M10'. Uses (type, value) tuples so int/str compare without TypeError."""
     def atomize(text):
         parts = re.split(r'(\d+)', str(text))
-        return [int(p) if p.isdigit() else p.lower() for p in parts if p]
+        result = []
+        for p in parts:
+            if not p:
+                continue
+            if p.isdigit():
+                result.append((0, int(p)))
+            else:
+                result.append((1, p.lower()))
+        return result
     return atomize(s or '')
 
 
@@ -97,7 +106,28 @@ def event_create(request):
 
 def event_detail(request, event_id):
     event = get_object_or_404(Event, pk=event_id)
-    analyses = sorted(event.analyses.all(), key=_analysis_sort_key)
+    unsorted_analyses = event.analyses.prefetch_related('marks__action').all()
+    analyses = sorted(unsorted_analyses, key=_analysis_sort_key)
+
+    # Build analyses_with_marks for timeline rendering (grouped by team)
+    analyses_data = []
+    for a in analyses:
+        marks_data = [
+            {'action_id': m.action_id, 'time_seconds': float(m.time_seconds)}
+            for m in sorted(a.marks.all(), key=lambda m: m.time_seconds)
+        ]
+        analyses_data.append({
+            'id': a.id,
+            'team': a.team,
+            'match': a.match,
+            'url': reverse('analysis_detail', args=[a.id]),
+            'marks': marks_data,
+        })
+
+    actions_data = [
+        {'id': a.id, 'code': a.code, 'name': a.name, 'points': a.points}
+        for a in Action.objects.all()
+    ]
 
     # Videos linked to an analysis for this event
     linked_video_ids = [a.video_id for a in analyses]
@@ -106,6 +136,8 @@ def event_detail(request, event_id):
     return render(request, 'core/event_detail.html', {
         'event': event,
         'analyses': analyses,
+        'analyses_with_marks_json': json.dumps(analyses_data),
+        'actions_json': json.dumps(actions_data),
         'unlinked_videos': unlinked_videos,
     })
 

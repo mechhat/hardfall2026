@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load static %}
 
 {% block title %}{{ analysis.team }} - {{ analysis.match }} - Hardfall{% endblock %}
 
@@ -106,6 +107,7 @@
 <p style="margin-top: 20px;"><a href="{% url 'event_detail' analysis.event.id %}">&larr; Back to {{ analysis.event.name }}</a></p>
 <p><a href="{% url 'video_detail' analysis.video.id %}" style="font-size: 13px;">New analysis from video</a></p>
 
+<script src="{% static 'core/timeline.js' %}"></script>
 <script>
 window.ANALYSIS_ID = {{ analysis.id }};
 window.INITIAL_MARKS = {{ marks_json|safe }};
@@ -178,76 +180,24 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         return a;
     }
 
-    const GAME_DURATION = 163;
-    let timelinePlayhead = null;
-    let timelineMarksLayer = null;
+    let timelineApi = null;
 
-    function findTelVideoTime() {
-        const telMark = marks.find(m => {
-            const action = actionsById[m.action_id];
-            return action && action.code === 'TEL';
-        });
-        return telMark ? telMark.time_seconds : null;
-    }
-
-    function getTimelineVideoStart() {
-        const telTime = findTelVideoTime();
-        if (telTime === null) return null;
-        return telTime - 23;
-    }
-
-    function videoTimeToTimelinePct(videoTime) {
-        const start = getTimelineVideoStart();
-        if (start === null) return null;
-        const gameTime = videoTime - start;
-        if (gameTime < 0 || gameTime > GAME_DURATION) return null;
-        return (gameTime / GAME_DURATION) * 100;
-    }
-
-    function timelinePctToVideoTime(pct) {
-        const start = getTimelineVideoStart();
-        if (start === null) return null;
-        return start + (pct / 100) * GAME_DURATION;
-    }
-
-    function renderTimelineBar() {
+    function initTimelineBar() {
         const container = document.getElementById('timeline-bar');
-        const phases = [
-            { label: 'AUTO', duration: 23, color: '#4CAF50' },
-            { label: 'TRANSITION', duration: 10, color: '#9E9E9E' },
-            { label: 'SHIFT 1', duration: 25, color: '#2196F3' },
-            { label: 'SHIFT 2', duration: 25, color: '#1976D2' },
-            { label: 'SHIFT 3', duration: 25, color: '#1565C0' },
-            { label: 'SHIFT 4', duration: 25, color: '#0D47A1' },
-            { label: 'END GAME', duration: 30, color: '#FF9800' },
-        ];
-
-        const phasesDiv = document.createElement('div');
-        phasesDiv.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex;';
-        phases.forEach(phase => {
-            const section = document.createElement('div');
-            const widthPct = (phase.duration / GAME_DURATION) * 100;
-            section.style.cssText = 'width: ' + widthPct + '%; background: ' + phase.color + '; display: flex; align-items: center; justify-content: center; overflow: hidden; white-space: nowrap;';
-            section.textContent = phase.label;
-            section.title = phase.label + ' (' + phase.duration + 's)';
-            phasesDiv.appendChild(section);
+        timelineApi = window.TimelineBar.createTimelineBar({
+            container: container,
+            marks: marks,
+            actionsById: actionsById,
+            addPlayhead: true,
+            height: 24,
+            maxWidth: '100%'
         });
-        container.appendChild(phasesDiv);
-
-        timelineMarksLayer = document.createElement('div');
-        timelineMarksLayer.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 1;';
-        container.appendChild(timelineMarksLayer);
-
-        timelinePlayhead = document.createElement('div');
-        timelinePlayhead.style.cssText = 'position: absolute; top: 0; width: 1px; height: 100%; background: white; pointer-events: none; display: none; z-index: 2;';
-        container.appendChild(timelinePlayhead);
-
+        container.style.cursor = 'pointer';
         container.addEventListener('click', e => {
-            const start = getTimelineVideoStart();
-            if (start === null) return;
+            if (timelineApi.getVideoStart() === null) return;
             const rect = container.getBoundingClientRect();
             const pct = ((e.clientX - rect.left) / rect.width) * 100;
-            const videoTime = timelinePctToVideoTime(pct);
+            const videoTime = timelineApi.timelinePctToVideoTime(pct);
             if (videoTime !== null) {
                 videoEl.currentTime = videoTime;
             }
@@ -255,25 +205,25 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     }
 
     function updateTimelinePlayhead() {
-        if (!timelinePlayhead) return;
-        const pct = videoTimeToTimelinePct(videoEl.currentTime);
+        if (!timelineApi || !timelineApi.playheadEl) return;
+        const pct = timelineApi.videoTimeToTimelinePct(videoEl.currentTime);
         if (pct !== null) {
-            timelinePlayhead.style.left = pct + '%';
-            timelinePlayhead.style.display = 'block';
+            timelineApi.playheadEl.style.left = pct + '%';
+            timelineApi.playheadEl.style.display = 'block';
         } else {
-            timelinePlayhead.style.display = 'none';
+            timelineApi.playheadEl.style.display = 'none';
         }
     }
 
     function updateTimelineMarks() {
-        if (!timelineMarksLayer) return;
-        timelineMarksLayer.innerHTML = '';
+        if (!timelineApi || !timelineApi.marksLayer) return;
+        timelineApi.marksLayer.innerHTML = '';
         marks.forEach(mark => {
-            const pct = videoTimeToTimelinePct(mark.time_seconds);
+            const pct = timelineApi.videoTimeToTimelinePct(mark.time_seconds);
             if (pct === null) return;
             const el = document.createElement('div');
             el.style.cssText = 'position: absolute; bottom: 0; width: 1px; height: 5px; background: white; left: ' + pct + '%;';
-            timelineMarksLayer.appendChild(el);
+            timelineApi.marksLayer.appendChild(el);
         });
     }
 
@@ -782,7 +732,7 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     function init() {
         videoEl = document.getElementById('video-player');
 
-        renderTimelineBar();
+        initTimelineBar();
         renderActionButtons();
         renderMarksTable();
 

@@ -1,4 +1,5 @@
 {% extends "core/base.html" %}
+{% load static %}
 
 {% block title %}{{ event.name }} - Hardfall{% endblock %}
 
@@ -90,5 +91,64 @@
 </ul>
 {% endif %}
 
+{% if analyses %}
+<div id="mark-timelines-section" style="margin-top: 30px; padding: 20px; background: #f5f5f5; border-radius: 4px;">
+    <h2>Mark Timelines by Robot</h2>
+    <div id="mark-timelines-container"></div>
+</div>
+{% endif %}
+
 <p><a href="{% url 'event_list' %}">&larr; Back to events</a></p>
+
+<script src="{% static 'core/timeline.js' %}"></script>
+<script>
+(function() {
+    const analysesData = {{ analyses_with_marks_json|safe }};
+    const actions = {{ actions_json|safe }};
+    const actionsById = {};
+    actions.forEach(function(a) { actionsById[a.id] = a; });
+
+    const container = document.getElementById('mark-timelines-container');
+    if (!container) return;
+
+    const byTeam = {};
+    analysesData.forEach(function(a) {
+        if (!byTeam[a.team]) byTeam[a.team] = [];
+        byTeam[a.team].push(a);
+    });
+
+    Object.keys(byTeam).sort().forEach(function(team) {
+        const teamSection = document.createElement('div');
+        teamSection.style.cssText = 'margin-bottom: 25px;';
+        const teamHeading = document.createElement('h3');
+        teamHeading.style.cssText = 'margin: 0 0 12px 0; font-size: 1.1em;';
+        teamHeading.textContent = team;
+        teamSection.appendChild(teamHeading);
+
+        byTeam[team].forEach(function(analysis) {
+            const row = document.createElement('div');
+            row.style.cssText = 'display: flex; align-items: center; gap: 15px; margin-bottom: 10px; flex-wrap: wrap;';
+            const label = document.createElement('a');
+            label.href = analysis.url;
+            label.textContent = analysis.match;
+            label.style.cssText = 'min-width: 80px; font-weight: 500; flex-shrink: 0;';
+            const timelineResult = window.TimelineBar.createTimelineBar({
+                marks: analysis.marks,
+                actionsById: actionsById,
+                linkHref: analysis.url,
+                height: 24,
+                width: '400px'
+            });
+            const timelineWrapper = document.createElement('div');
+            timelineWrapper.style.cssText = 'flex: 1; min-width: 300px;';
+            timelineWrapper.appendChild(timelineResult.element);
+            row.appendChild(label);
+            row.appendChild(timelineWrapper);
+            teamSection.appendChild(row);
+        });
+
+        container.appendChild(teamSection);
+    });
+})();
+</script>
 {% endblock %}
