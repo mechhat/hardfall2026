@@ -278,8 +278,19 @@ def video_upload(request, event_id):
         file_size_bytes=len(file_content),
     )
 
+    redirect_url = f'/events/{event_id}'
+    team = request.POST.get('team', '').strip()
+    if team:
+        analysis = Analysis.objects.create(
+            event=event,
+            video=video,
+            team=team,
+            match=filename,
+        )
+        redirect_url = f'/analyses/{analysis.id}'
+
     return JsonResponse({
         'success': True,
         'video_id': video.id,
-        'redirect_url': f'/events/{event_id}',
+        'redirect_url': redirect_url,
     })
