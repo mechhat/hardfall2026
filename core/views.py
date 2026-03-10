@@ -167,7 +167,8 @@ def analysis_save_marks(request, analysis_id):
 
     # Validate all action IDs exist
     action_ids = {m['action_id'] for m in marks_data}
-    existing_actions = set(Action.objects.filter(id__in=action_ids).values_list('id', flat=True))
+    existing_actions = set(Action.objects.filter(
+        id__in=action_ids).values_list('id', flat=True))
     if action_ids and action_ids != existing_actions:
         return JsonResponse({'error': 'Invalid action ID'}, status=400)
 
@@ -210,6 +211,27 @@ def analysis_save_marks(request, analysis_id):
     ]
 
     return JsonResponse({'success': True, 'marks': saved_marks})
+
+
+@require_POST
+def analysis_update(request, analysis_id):
+    analysis = get_object_or_404(Analysis, pk=analysis_id)
+
+    try:
+        data = json.loads(request.body)
+        team = data.get('team', '').strip()
+        match = data.get('match', '').strip()
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    if not team or not match:
+        return JsonResponse({'error': 'Team and match are required'}, status=400)
+
+    analysis.team = team
+    analysis.match = match
+    analysis.save()
+
+    return JsonResponse({'success': True, 'team': analysis.team, 'match': analysis.match})
 
 
 @require_POST

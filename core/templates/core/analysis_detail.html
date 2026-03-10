@@ -3,7 +3,22 @@
 {% block title %}{{ analysis.team }} - {{ analysis.match }} - Hardfall{% endblock %}
 
 {% block content %}
-<h1>{{ analysis.team }} - {{ analysis.match }}</h1>
+<style>#edit-name-btn:hover{opacity:1;color:#666;background:none!important}</style>
+<div id="analysis-header" style="display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap;">
+    <h1 id="analysis-title" style="margin: 0;">{{ analysis.team }} - {{ analysis.match }}</h1>
+    <button id="edit-name-btn" type="button" title="Edit team and match names" style="background: none; border: none; padding: 4px; cursor: pointer; color: #999; opacity: 0.6; vertical-align: middle;" aria-label="Edit names">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    </button>
+</div>
+<div id="analysis-name-edit" style="display: none; margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 4px;">
+    <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+        <label>Team: <input type="text" id="edit-team-input" maxlength="100" style="padding: 6px 10px;"></label>
+        <label>Match: <input type="text" id="edit-match-input" maxlength="100" style="padding: 6px 10px;"></label>
+        <button id="save-name-btn" type="button" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Save</button>
+        <button id="cancel-name-btn" type="button" style="background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Cancel</button>
+        <span id="name-save-status" style="margin-left: 5px;"></span>
+    </div>
+</div>
 
 <div id="video-container" style="position: relative; display: inline-block; max-width: 1280px; width: 100%;">
     <video id="video-player" width="100%" style="max-height: 70vh;">
@@ -91,6 +106,9 @@ window.INITIAL_MARKS = {{ marks_json|safe }};
 window.ACTIONS = {{ actions_json|safe }};
 window.CSRF_TOKEN = '{{ csrf_token }}';
 window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
+window.UPDATE_URL = '{% url "analysis_update" analysis.id %}';
+window.ANALYSIS_TEAM = "{{ analysis.team|escapejs }}";
+window.ANALYSIS_MATCH = "{{ analysis.match|escapejs }}";
 </script>
 
 <script>
@@ -830,6 +848,65 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         document.getElementById('current-count-input').addEventListener('change', handleCurrentMarkCountChange);
         document.getElementById('delete-mark-btn').addEventListener('click', handleDeleteCurrentMark);
         document.getElementById('save-btn').addEventListener('click', handleSave);
+
+        // Edit analysis team/match names
+        const titleEl = document.getElementById('analysis-title');
+        const editBtn = document.getElementById('edit-name-btn');
+        const editPanel = document.getElementById('analysis-name-edit');
+        const teamInput = document.getElementById('edit-team-input');
+        const matchInput = document.getElementById('edit-match-input');
+        const saveNameBtn = document.getElementById('save-name-btn');
+        const cancelNameBtn = document.getElementById('cancel-name-btn');
+        const nameStatusSpan = document.getElementById('name-save-status');
+
+        editBtn.addEventListener('click', () => {
+            teamInput.value = window.ANALYSIS_TEAM || '';
+            matchInput.value = window.ANALYSIS_MATCH || '';
+            editPanel.style.display = 'block';
+            nameStatusSpan.textContent = '';
+        });
+
+        cancelNameBtn.addEventListener('click', () => {
+            editPanel.style.display = 'none';
+        });
+
+        saveNameBtn.addEventListener('click', async () => {
+            const team = teamInput.value.trim();
+            const match = matchInput.value.trim();
+            if (!team || !match) {
+                nameStatusSpan.textContent = 'Team and match are required';
+                return;
+            }
+            saveNameBtn.disabled = true;
+            nameStatusSpan.textContent = 'Saving...';
+
+            try {
+                const response = await fetch(window.UPDATE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': window.CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ team: team, match: match }),
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    window.ANALYSIS_TEAM = data.team;
+                    window.ANALYSIS_MATCH = data.match;
+                    titleEl.textContent = data.team + ' - ' + data.match;
+                    document.title = data.team + ' - ' + data.match + ' - Hardfall';
+                    editPanel.style.display = 'none';
+                    nameStatusSpan.textContent = '';
+                } else {
+                    nameStatusSpan.textContent = data.error || 'Save failed';
+                }
+            } catch (err) {
+                nameStatusSpan.textContent = 'Save failed: ' + err.message;
+            } finally {
+                saveNameBtn.disabled = false;
+            }
+        });
 
         // Warn if unsaved changes when leaving
         window.addEventListener('beforeunload', (e) => {
