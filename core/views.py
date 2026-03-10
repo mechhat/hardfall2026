@@ -271,6 +271,14 @@ def analysis_update(request, analysis_id):
 
 
 @require_POST
+def analysis_delete(request, analysis_id):
+    analysis = get_object_or_404(Analysis, pk=analysis_id)
+    event_id = analysis.event_id
+    analysis.delete()
+    return redirect('event_detail', event_id=event_id)
+
+
+@require_POST
 def video_upload(request, event_id):
     event = get_object_or_404(Event, pk=event_id)
 

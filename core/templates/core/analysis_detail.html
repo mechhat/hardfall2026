@@ -107,6 +107,11 @@
 <p style="margin-top: 20px;"><a href="{% url 'event_detail' analysis.event.id %}">&larr; Back to {{ analysis.event.name }}</a></p>
 <p><a href="{% url 'video_detail' analysis.video.id %}" style="font-size: 13px;">New analysis from video</a></p>
 
+<form method="post" action="{% url 'analysis_delete' analysis.id %}" onsubmit="return confirm('Delete this analysis and all its marks? This cannot be undone.');" style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;">
+    {% csrf_token %}
+    <button type="submit" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Delete analysis</button>
+</form>
+
 <script src="{% static 'core/timeline.js' %}"></script>
 <script>
 window.ANALYSIS_ID = {{ analysis.id }};
