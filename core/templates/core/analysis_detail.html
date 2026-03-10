@@ -11,13 +11,13 @@
     </button>
 </div>
 <div id="analysis-name-edit" style="display: none; margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 4px;">
-    <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-        <label>Team: <input type="text" id="edit-team-input" maxlength="100" style="padding: 6px 10px;"></label>
-        <label>Match: <input type="text" id="edit-match-input" maxlength="100" style="padding: 6px 10px;"></label>
-        <button id="save-name-btn" type="button" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Save</button>
+    <form method="post" action="{% url 'analysis_update' analysis.id %}" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+        {% csrf_token %}
+        <label>Team: <input type="text" name="team" value="{{ analysis.team }}" maxlength="100" style="padding: 6px 10px;"></label>
+        <label>Match: <input type="text" name="match" value="{{ analysis.match }}" maxlength="100" style="padding: 6px 10px;"></label>
+        <button type="submit" style="background: #28a745; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Save</button>
         <button id="cancel-name-btn" type="button" style="background: #6c757d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Cancel</button>
-        <span id="name-save-status" style="margin-left: 5px;"></span>
-    </div>
+    </form>
 </div>
 
 <div id="video-container" style="position: relative; display: inline-block; max-width: 1280px; width: 100%;">
@@ -106,9 +106,6 @@ window.INITIAL_MARKS = {{ marks_json|safe }};
 window.ACTIONS = {{ actions_json|safe }};
 window.CSRF_TOKEN = '{{ csrf_token }}';
 window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
-window.UPDATE_URL = '{% url "analysis_update" analysis.id %}';
-window.ANALYSIS_TEAM = "{{ analysis.team|escapejs }}";
-window.ANALYSIS_MATCH = "{{ analysis.match|escapejs }}";
 </script>
 
 <script>
@@ -849,63 +846,17 @@ window.ANALYSIS_MATCH = "{{ analysis.match|escapejs }}";
         document.getElementById('delete-mark-btn').addEventListener('click', handleDeleteCurrentMark);
         document.getElementById('save-btn').addEventListener('click', handleSave);
 
-        // Edit analysis team/match names
-        const titleEl = document.getElementById('analysis-title');
+        // Edit analysis team/match names - show/hide form with JS
         const editBtn = document.getElementById('edit-name-btn');
         const editPanel = document.getElementById('analysis-name-edit');
-        const teamInput = document.getElementById('edit-team-input');
-        const matchInput = document.getElementById('edit-match-input');
-        const saveNameBtn = document.getElementById('save-name-btn');
         const cancelNameBtn = document.getElementById('cancel-name-btn');
-        const nameStatusSpan = document.getElementById('name-save-status');
 
         editBtn.addEventListener('click', () => {
-            teamInput.value = window.ANALYSIS_TEAM || '';
-            matchInput.value = window.ANALYSIS_MATCH || '';
             editPanel.style.display = 'block';
-            nameStatusSpan.textContent = '';
         });
 
         cancelNameBtn.addEventListener('click', () => {
             editPanel.style.display = 'none';
-        });
-
-        saveNameBtn.addEventListener('click', async () => {
-            const team = teamInput.value.trim();
-            const match = matchInput.value.trim();
-            if (!team || !match) {
-                nameStatusSpan.textContent = 'Team and match are required';
-                return;
-            }
-            saveNameBtn.disabled = true;
-            nameStatusSpan.textContent = 'Saving...';
-
-            try {
-                const response = await fetch(window.UPDATE_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': window.CSRF_TOKEN,
-                    },
-                    body: JSON.stringify({ team: team, match: match }),
-                });
-                const data = await response.json();
-
-                if (data.success) {
-                    window.ANALYSIS_TEAM = data.team;
-                    window.ANALYSIS_MATCH = data.match;
-                    titleEl.textContent = data.team + ' - ' + data.match;
-                    document.title = data.team + ' - ' + data.match + ' - Hardfall';
-                    editPanel.style.display = 'none';
-                    nameStatusSpan.textContent = '';
-                } else {
-                    nameStatusSpan.textContent = data.error || 'Save failed';
-                }
-            } catch (err) {
-                nameStatusSpan.textContent = 'Save failed: ' + err.message;
-            } finally {
-                saveNameBtn.disabled = false;
-            }
         });
 
         // Warn if unsaved changes when leaving

@@ -6,6 +6,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .models import Event, Video, Analysis, Action, Mark
@@ -216,22 +217,17 @@ def analysis_save_marks(request, analysis_id):
 @require_POST
 def analysis_update(request, analysis_id):
     analysis = get_object_or_404(Analysis, pk=analysis_id)
-
-    try:
-        data = json.loads(request.body)
-        team = data.get('team', '').strip()
-        match = data.get('match', '').strip()
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    team = request.POST.get('team', '').strip()
+    match = request.POST.get('match', '').strip()
 
     if not team or not match:
-        return JsonResponse({'error': 'Team and match are required'}, status=400)
+        messages.error(request, 'Team and match are required.')
+        return redirect('analysis_detail', analysis_id=analysis_id)
 
     analysis.team = team
     analysis.match = match
     analysis.save()
-
-    return JsonResponse({'success': True, 'team': analysis.team, 'match': analysis.match})
+    return redirect('analysis_detail', analysis_id=analysis_id)
 
 
 @require_POST
