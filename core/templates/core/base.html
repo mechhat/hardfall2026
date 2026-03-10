@@ -75,6 +75,13 @@
     </style>
 </head>
 <body>
+    {% if messages %}
+    <ul style="list-style: none; padding: 0; margin-bottom: 15px;">
+        {% for message in messages %}
+        <li style="padding: 10px; margin-bottom: 5px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; color: #856404;">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
     {% block content %}{% endblock %}
 </body>
 </html>

@@ -6,6 +6,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import FileResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib import messages
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .models import Event, Video, Analysis, Action, Mark
@@ -167,7 +168,8 @@ def analysis_save_marks(request, analysis_id):
 
     # Validate all action IDs exist
     action_ids = {m['action_id'] for m in marks_data}
-    existing_actions = set(Action.objects.filter(id__in=action_ids).values_list('id', flat=True))
+    existing_actions = set(Action.objects.filter(
+        id__in=action_ids).values_list('id', flat=True))
     if action_ids and action_ids != existing_actions:
         return JsonResponse({'error': 'Invalid action ID'}, status=400)
 
@@ -210,6 +212,22 @@ def analysis_save_marks(request, analysis_id):
     ]
 
     return JsonResponse({'success': True, 'marks': saved_marks})
+
+
+@require_POST
+def analysis_update(request, analysis_id):
+    analysis = get_object_or_404(Analysis, pk=analysis_id)
+    team = request.POST.get('team', '').strip()
+    match = request.POST.get('match', '').strip()
+
+    if not team or not match:
+        messages.error(request, 'Team and match are required.')
+        return redirect('analysis_detail', analysis_id=analysis_id)
+
+    analysis.team = team
+    analysis.match = match
+    analysis.save()
+    return redirect('analysis_detail', analysis_id=analysis_id)
 
 
 @require_POST
