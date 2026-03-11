@@ -124,12 +124,36 @@
         };
     }
 
+    /**
+     * Compute scoring attempts (SC count) and total game score from marks.
+     * @param {Array} marks - Marks with action_id, count, is_failure
+     * @param {Object} actionsById - Map of action id to action {code, points, ...}
+     * @returns {Object} { scoringAttempts, totalScore }
+     */
+    function computeScoringSummary(marks, actionsById) {
+        var scoringAttempts = 0;
+        var totalScore = 0;
+        marks.forEach(function(mark) {
+            var action = actionsById[mark.action_id];
+            if (!action) return;
+            var count = mark.count || 1;
+            if (action.code === 'SC') {
+                scoringAttempts += count;
+            }
+            if (!mark.is_failure) {
+                totalScore += action.points * count;
+            }
+        });
+        return { scoringAttempts: scoringAttempts, totalScore: totalScore };
+    }
+
     window.TimelineBar = {
         GAME_DURATION: GAME_DURATION,
         PHASES: PHASES,
         createTimelineBar: createTimelineBar,
         getTimelineVideoStart: getTimelineVideoStart,
         videoTimeToTimelinePct: videoTimeToTimelinePct,
-        timelinePctToVideoTime: timelinePctToVideoTime
+        timelinePctToVideoTime: timelinePctToVideoTime,
+        computeScoringSummary: computeScoringSummary
     };
 })();

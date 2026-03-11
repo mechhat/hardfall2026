@@ -137,6 +137,20 @@
             timelineWrapper.appendChild(timelineResult.element);
             row.appendChild(label);
             row.appendChild(timelineWrapper);
+
+            const summary = window.TimelineBar.computeScoringSummary(analysis.marks, actionsById);
+            const attemptsSpan = document.createElement('span');
+            attemptsSpan.style.cssText = 'font-variant-numeric: tabular-nums; min-width: 35px; text-align: right; flex-shrink: 0;';
+            attemptsSpan.textContent = summary.scoringAttempts;
+            attemptsSpan.title = 'Scoring attempts';
+            row.appendChild(attemptsSpan);
+
+            const scoreSpan = document.createElement('span');
+            scoreSpan.style.cssText = 'font-weight: bold; font-variant-numeric: tabular-nums; min-width: 35px; text-align: right; flex-shrink: 0;';
+            scoreSpan.textContent = summary.totalScore;
+            scoreSpan.title = 'Game score';
+            row.appendChild(scoreSpan);
+
             teamSection.appendChild(row);
         });
 

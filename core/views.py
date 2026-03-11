@@ -104,7 +104,12 @@ def event_detail(request, event_id):
     analyses_data = []
     for a in analyses:
         marks_data = [
-            {'action_id': m.action_id, 'time_seconds': float(m.time_seconds)}
+            {
+                'action_id': m.action_id,
+                'time_seconds': float(m.time_seconds),
+                'count': m.count,
+                'is_failure': m.is_failure,
+            }
             for m in sorted(a.marks.all(), key=lambda m: m.time_seconds)
         ]
         analyses_data.append({
