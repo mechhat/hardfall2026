@@ -8,7 +8,8 @@
     const GAME_DURATION = 163;
     const PHASES = [
         { label: 'AUTO', duration: 23, color: '#4CAF50' },
-        { label: 'TRANSITION', duration: 10, color: '#9E9E9E' },
+        { label: '', duration: 3, color: '#CECECE' },
+        { label: 'TRANS', duration: 10, color: '#9E9E9E' },
         { label: 'SHIFT 1', duration: 25, color: '#2196F3' },
         { label: 'SHIFT 2', duration: 25, color: '#1976D2' },
         { label: 'SHIFT 3', duration: 25, color: '#1565C0' },
@@ -25,10 +26,10 @@
     }
 
     function getTimelineVideoStart(marks, actionsById) {
-        var telTime = findPhaseMark(marks, actionsById, 'TEL');
-        if (telTime !== null) return telTime - 23;
-        var autTime = findPhaseMark(marks, actionsById, 'AUT');
+        const autTime = findPhaseMark(marks, actionsById, 'AUT');
         if (autTime !== null) return autTime;
+        const telTime = findPhaseMark(marks, actionsById, 'TEL');
+        if (telTime !== null) return telTime - 26;
         return 0;
     }
 
@@ -87,10 +88,15 @@
         const marksLayer = document.createElement('div');
         marksLayer.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 1;';
         marks.forEach(function(mark) {
+            const action = actionsById[mark.action_id];
             const pct = videoTimeToTimelinePct(mark.time_seconds, videoStart);
             if (pct === null) return;
             const el = document.createElement('div');
-            el.style.cssText = 'position: absolute; bottom: 0; width: 1px; height: 5px; background: white; left: ' + pct + '%;';
+            let h = 2;
+            if(action.code == "SC"){
+                h = 8;
+            }
+            el.style.cssText = 'position: absolute; bottom: 0; width: 1px; height: ' +h + 'px; background: white; left: ' + pct + '%;';
             marksLayer.appendChild(el);
         });
         container.appendChild(marksLayer);
