@@ -27,7 +27,24 @@ function createHSVThreshold(videoEl, opts = {}) {
   canvas.style.display = computed.display === "none" ? "block" : computed.display;
   videoEl.parentNode.insertBefore(canvas, videoEl);
 
-  const gl = canvas.getContext("webgl", { antialias: false });
+  // Overlay canvas for centroid markers (2D context)
+  const overlay = document.createElement("canvas");
+  overlay.style.position = "absolute";
+  overlay.style.pointerEvents = "none";
+  canvas.style.position = "relative";
+  canvas.parentNode.insertBefore(overlay, canvas.nextSibling);
+
+  function syncOverlay() {
+    const rect = canvas.getBoundingClientRect();
+    overlay.style.left = rect.left + "px";
+    overlay.style.top = rect.top + "px";
+    overlay.width = canvas.width;
+    overlay.height = canvas.height;
+    overlay.style.width = canvas.style.width || rect.width + "px";
+    overlay.style.height = canvas.style.height || rect.height + "px";
+  }
+
+  const gl = canvas.getContext("webgl", { antialias: false, preserveDrawingBuffer: true });
   if (!gl) throw new Error("WebGL not supported");
 
   // --- compile shaders ---
@@ -118,6 +135,87 @@ function createHSVThreshold(videoEl, opts = {}) {
       gl.uniform3f(uLo, hsv.hMin / 360, hsv.sMin / 100, hsv.vMin / 100);
       gl.uniform3f(uHi, hsv.hMax / 360, hsv.sMax / 100, hsv.vMax / 100);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      // --- centroid detection ---
+      const pixels = new Uint8Array(w * h * 4);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+      // Build binary mask (WebGL readPixels is bottom-up)
+      const mask = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const srcIdx = (y * w + x) * 4;
+          mask[(h - 1 - y) * w + x] = pixels[srcIdx] > 127 ? 1 : 0;
+        }
+      }
+
+      // Connected-component labeling (two-pass union-find)
+      const labels = new Int32Array(w * h);
+      const parent = [0];
+      let nextLabel = 1;
+
+      function find(l) {
+        while (parent[l] !== l) { parent[l] = parent[parent[l]]; l = parent[l]; }
+        return l;
+      }
+      function unite(a, b) {
+        a = find(a); b = find(b);
+        if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);
+      }
+
+      // First pass
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          if (!mask[i]) continue;
+          const top = y > 0 ? labels[i - w] : 0;
+          const left = x > 0 ? labels[i - 1] : 0;
+          if (top && left) {
+            labels[i] = Math.min(top, left);
+            unite(top, left);
+          } else if (top) {
+            labels[i] = top;
+          } else if (left) {
+            labels[i] = left;
+          } else {
+            parent.push(nextLabel);
+            labels[i] = nextLabel++;
+          }
+        }
+      }
+
+      // Second pass — collect blob stats
+      const blobs = new Map();
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = y * w + x;
+          if (!labels[i]) continue;
+          const root = find(labels[i]);
+          labels[i] = root;
+          let b = blobs.get(root);
+          if (!b) { b = { sx: 0, sy: 0, n: 0 }; blobs.set(root, b); }
+          b.sx += x; b.sy += y; b.n++;
+        }
+      }
+
+      // Filter by size (3-12 px) and draw red centroids
+      const centroids = [];
+      for (const b of blobs.values()) {
+        if (b.n >= 3 && b.n <= 12) {
+          centroids.push({ x: b.sx / b.n, y: b.sy / b.n });
+        }
+      }
+
+      // Draw red centroid markers on 2D overlay
+      syncOverlay();
+      const ctx2d = overlay.getContext("2d");
+      ctx2d.clearRect(0, 0, overlay.width, overlay.height);
+      ctx2d.fillStyle = "red";
+      for (const c of centroids) {
+        ctx2d.beginPath();
+        ctx2d.arc(c.x, c.y, 3, 0, Math.PI * 2);
+        ctx2d.fill();
+      }
     }
 
     // Prefer requestVideoFrameCallback when available
@@ -150,6 +248,7 @@ function createHSVThreshold(videoEl, opts = {}) {
       cancelAnimationFrame(raf);
       videoEl.removeEventListener("play", draw);
       canvas.remove();
+      overlay.remove();
       gl.deleteTexture(tex);
       gl.deleteProgram(prog);
       gl.deleteShader(vs);
