@@ -112,14 +112,14 @@
             <input type="checkbox" id="ball-detect-toggle">
             Enable
         </label>
-        <label>H min<br><input type="range" id="bd-h-min" min="0" max="360" value="0" style="width:80px"><span id="bd-h-min-val">0</span></label>
-        <label>H max<br><input type="range" id="bd-h-max" min="0" max="360" value="360" style="width:80px"><span id="bd-h-max-val">360</span></label>
-        <label>S min<br><input type="range" id="bd-s-min" min="0" max="100" value="30" style="width:80px"><span id="bd-s-min-val">30</span></label>
+        <label>H min<br><input type="range" id="bd-h-min" min="0" max="360" value="30" style="width:80px"><span id="bd-h-min-val">30</span></label>
+        <label>H max<br><input type="range" id="bd-h-max" min="0" max="360" value="65" style="width:80px"><span id="bd-h-max-val">65</span></label>
+        <label>S min<br><input type="range" id="bd-s-min" min="0" max="100" value="65" style="width:80px"><span id="bd-s-min-val">65</span></label>
         <label>S max<br><input type="range" id="bd-s-max" min="0" max="100" value="100" style="width:80px"><span id="bd-s-max-val">100</span></label>
-        <label>V min<br><input type="range" id="bd-v-min" min="0" max="100" value="30" style="width:80px"><span id="bd-v-min-val">30</span></label>
+        <label>V min<br><input type="range" id="bd-v-min" min="0" max="100" value="45" style="width:80px"><span id="bd-v-min-val">45</span></label>
         <label>V max<br><input type="range" id="bd-v-max" min="0" max="100" value="100" style="width:80px"><span id="bd-v-max-val">100</span></label>
-        <label>Min size (px)<br><input type="number" id="bd-min-size" min="1" max="100000" value="50" style="width:80px"></label>
-        <label>Max size (px)<br><input type="number" id="bd-max-size" min="1" max="100000" value="50000" style="width:80px"></label>
+        <label>Min size (px)<br><input type="number" id="bd-min-size" min="1" max="100000" value="4" style="width:80px"></label>
+        <label>Max size (px)<br><input type="number" id="bd-max-size" min="1" max="100000" value="30" style="width:80px"></label>
     </div>
     <div id="ball-detect-results" style="margin-top: 10px; font-family: monospace; font-size: 13px;"></div>
 </div>
@@ -977,16 +977,12 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         // Add computer vision 
         const video = document.querySelector("video");
 
-        // Yellow ball detection defaults are baked in, or override:
         const ctrl = createHSVThreshold(video, {
-          hMin: 55, hMax: 65,
+          hMin: 30, hMax: 65,
           sMin: 65, sMax: 100,
           vMin: 45, vMax: 100,
         });
-        window.ctrl = ctrl
-
-        // Tweak live:
-        ctrl.setHSV({ hMin: 30, hMax: 65 });
+        window.ctrl = ctrl;
 
     }
 
@@ -996,81 +992,6 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
 <script>
 (function() {
-    var VERT_SRC = [
-        'attribute vec2 a_pos;',
-        'varying vec2 v_uv;',
-        'void main() {',
-        '  v_uv = a_pos * 0.5 + 0.5;',
-        '  gl_Position = vec4(a_pos, 0.0, 1.0);',
-        '}'
-    ].join('\n');
-
-    var FRAG_SRC = [
-        'precision mediump float;',
-        'varying vec2 v_uv;',
-        'uniform sampler2D u_video;',
-        'uniform float u_hMin;',
-        'uniform float u_hMax;',
-        'uniform float u_sMin;',
-        'uniform float u_sMax;',
-        'uniform float u_vMin;',
-        'uniform float u_vMax;',
-        '',
-        'vec3 rgb2hsv(vec3 c) {',
-        '  float cMax = max(c.r, max(c.g, c.b));',
-        '  float cMin = min(c.r, min(c.g, c.b));',
-        '  float d = cMax - cMin;',
-        '  float h = 0.0;',
-        '  if (d > 0.001) {',
-        '    if (cMax == c.r) h = mod((c.g - c.b) / d, 6.0);',
-        '    else if (cMax == c.g) h = (c.b - c.r) / d + 2.0;',
-        '    else h = (c.r - c.g) / d + 4.0;',
-        '    h *= 60.0;',
-        '    if (h < 0.0) h += 360.0;',
-        '  }',
-        '  float s = cMax > 0.001 ? d / cMax : 0.0;',
-        '  return vec3(h, s * 100.0, cMax * 100.0);',
-        '}',
-        '',
-        'void main() {',
-        '  vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);',
-        '  vec4 rgb = texture2D(u_video, uv);',
-        '  vec3 hsv = rgb2hsv(rgb.rgb);',
-        '  bool hOk;',
-        '  if (u_hMin <= u_hMax) {',
-        '    hOk = hsv.x >= u_hMin && hsv.x <= u_hMax;',
-        '  } else {',
-        '    hOk = hsv.x >= u_hMin || hsv.x <= u_hMax;',
-        '  }',
-        '  bool match = hOk && hsv.y >= u_sMin && hsv.y <= u_sMax && hsv.z >= u_vMin && hsv.z <= u_vMax;',
-        '  gl_FragColor = match ? vec4(1.0, 1.0, 1.0, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);',
-        '}'
-    ].join('\n');
-
-    function createShader(gl, type, src) {
-        var s = gl.createShader(type);
-        gl.shaderSource(s, src);
-        gl.compileShader(s);
-        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-            console.error('Shader compile error:', gl.getShaderInfoLog(s));
-            gl.deleteShader(s);
-            return null;
-        }
-        return s;
-    }
-
-    function createProgram(gl, vs, fs) {
-        var p = gl.createProgram();
-        gl.attachShader(p, vs);
-        gl.attachShader(p, fs);
-        gl.linkProgram(p);
-        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
-            console.error('Program link error:', gl.getProgramInfoLog(p));
-            return null;
-        }
-        return p;
-    }
-
     // Connected component labeling with union-find
     function labelBlobs(mask, w, h) {
         var labels = new Int32Array(w * h);
@@ -1094,7 +1015,6 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             }
         }
 
-        // First pass
         for (var y = 0; y < h; y++) {
             for (var x = 0; x < w; x++) {
                 var idx = y * w + x;
@@ -1118,7 +1038,6 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             }
         }
 
-        // Second pass - resolve labels
         for (var i = 0; i < labels.length; i++) {
             if (labels[i] > 0) {
                 labels[i] = find(labels[i]);
@@ -1158,38 +1077,15 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         return result;
     }
 
-    var glCanvas = document.createElement('canvas');
-    var gl = glCanvas.getContext('webgl', { preserveDrawingBuffer: true });
-    if (!gl) {
-        console.warn('WebGL not available for ball detection');
+    var threshCanvas = window.ctrl ? window.ctrl.canvas : null;
+    if (!threshCanvas) {
+        console.warn('Vision threshold canvas not available for ball detection');
         return;
     }
 
-    var vs = createShader(gl, gl.VERTEX_SHADER, VERT_SRC);
-    var fs = createShader(gl, gl.FRAGMENT_SHADER, FRAG_SRC);
-    if (!vs || !fs) return;
-    var prog = createProgram(gl, vs, fs);
-    if (!prog) return;
-
-    var aPosLoc = gl.getAttribLocation(prog, 'a_pos');
-    var uVideo = gl.getUniformLocation(prog, 'u_video');
-    var uHMin = gl.getUniformLocation(prog, 'u_hMin');
-    var uHMax = gl.getUniformLocation(prog, 'u_hMax');
-    var uSMin = gl.getUniformLocation(prog, 'u_sMin');
-    var uSMax = gl.getUniformLocation(prog, 'u_sMax');
-    var uVMin = gl.getUniformLocation(prog, 'u_vMin');
-    var uVMax = gl.getUniformLocation(prog, 'u_vMax');
-
-    var quadBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
-
-    var tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    // Offscreen 2D canvas to read pixels from the vision.js WebGL canvas
+    var readCanvas = document.createElement('canvas');
+    var readCtx = readCanvas.getContext('2d');
 
     var overlayCanvas = document.getElementById('ball-overlay');
     var overlayCtx = overlayCanvas.getContext('2d');
@@ -1197,28 +1093,20 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     var toggle = document.getElementById('ball-detect-toggle');
     var resultsDiv = document.getElementById('ball-detect-results');
 
-    // Downsample factor for performance
-    var DS = 4;
-
-    function getConfig() {
-        return {
-            hMin: parseFloat(document.getElementById('bd-h-min').value),
-            hMax: parseFloat(document.getElementById('bd-h-max').value),
-            sMin: parseFloat(document.getElementById('bd-s-min').value),
-            sMax: parseFloat(document.getElementById('bd-s-max').value),
-            vMin: parseFloat(document.getElementById('bd-v-min').value),
-            vMax: parseFloat(document.getElementById('bd-v-max').value),
-            minSize: parseInt(document.getElementById('bd-min-size').value) || 1,
-            maxSize: parseInt(document.getElementById('bd-max-size').value) || 100000
-        };
-    }
-
-    // Wire up slider value labels
+    // Wire HSV sliders to vision.js ctrl.setHSV
     ['bd-h-min','bd-h-max','bd-s-min','bd-s-max','bd-v-min','bd-v-max'].forEach(function(id) {
         var slider = document.getElementById(id);
         var valSpan = document.getElementById(id + '-val');
         slider.addEventListener('input', function() {
             valSpan.textContent = slider.value;
+            window.ctrl.setHSV({
+                hMin: parseFloat(document.getElementById('bd-h-min').value),
+                hMax: parseFloat(document.getElementById('bd-h-max').value),
+                sMin: parseFloat(document.getElementById('bd-s-min').value),
+                sMax: parseFloat(document.getElementById('bd-s-max').value),
+                vMin: parseFloat(document.getElementById('bd-v-min').value),
+                vMax: parseFloat(document.getElementById('bd-v-max').value)
+            });
             runDetection();
         });
     });
@@ -1232,70 +1120,44 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         if (!toggle.checked) return;
         if (videoEl.readyState < 2) return;
 
-        var vw = videoEl.videoWidth;
-        var vh = videoEl.videoHeight;
-        if (vw === 0 || vh === 0) return;
+        var tw = threshCanvas.width;
+        var th = threshCanvas.height;
+        if (tw === 0 || th === 0) return;
 
-        var dw = Math.ceil(vw / DS);
-        var dh = Math.ceil(vh / DS);
+        // Read the threshold canvas at full resolution
+        readCanvas.width = tw;
+        readCanvas.height = th;
+        readCtx.drawImage(threshCanvas, 0, 0);
+        var imageData = readCtx.getImageData(0, 0, tw, th);
+        var pixels = imageData.data;
 
-        glCanvas.width = dw;
-        glCanvas.height = dh;
-        gl.viewport(0, 0, dw, dh);
-
-        // Upload video frame as texture
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
-
-        var cfg = getConfig();
-
-        gl.useProgram(prog);
-        gl.uniform1i(uVideo, 0);
-        gl.uniform1f(uHMin, cfg.hMin);
-        gl.uniform1f(uHMax, cfg.hMax);
-        gl.uniform1f(uSMin, cfg.sMin);
-        gl.uniform1f(uSMax, cfg.sMax);
-        gl.uniform1f(uVMin, cfg.vMin);
-        gl.uniform1f(uVMax, cfg.vMax);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
-        gl.enableVertexAttribArray(aPosLoc);
-        gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-        // Read back thresholded mask
-        var pixels = new Uint8Array(dw * dh * 4);
-        gl.readPixels(0, 0, dw, dh, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-        // Build binary mask (1 = match, 0 = no match)
-        var mask = new Uint8Array(dw * dh);
+        // Build binary mask from the white pixels in the threshold output
+        var mask = new Uint8Array(tw * th);
         for (var i = 0; i < mask.length; i++) {
             mask[i] = pixels[i * 4] > 128 ? 1 : 0;
         }
 
-        // Connected component labeling
-        var labels = labelBlobs(mask, dw, dh);
+        var labels = labelBlobs(mask, tw, th);
 
-        // Min/max size scaled to downsampled pixels
-        var dsScale = DS * DS;
-        var minPx = Math.max(1, Math.round(cfg.minSize / dsScale));
-        var maxPx = Math.round(cfg.maxSize / dsScale);
+        var minSize = parseInt(document.getElementById('bd-min-size').value) || 4;
+        var maxSize = parseInt(document.getElementById('bd-max-size').value) || 30;
 
-        var blobs = extractBlobs(labels, dw, dh, minPx, maxPx);
+        var blobs = extractBlobs(labels, tw, th, minSize, maxSize);
 
         // Draw on overlay
         overlayCanvas.width = videoEl.clientWidth;
         overlayCanvas.height = videoEl.clientHeight;
 
+        var vw = videoEl.videoWidth;
+        var vh = videoEl.videoHeight;
         var scaleX = videoEl.clientWidth / vw;
         var scaleY = videoEl.clientHeight / vh;
 
         for (var j = 0; j < blobs.length; j++) {
             var b = blobs[j];
-            // Convert from downsampled coords back to video coords, then to display coords
-            var dx = b.cx * DS * scaleX;
-            var dy = b.cy * DS * scaleY;
-            var radius = Math.max(4, Math.sqrt(b.size * dsScale / Math.PI) * scaleX * 0.5);
+            var dx = b.cx * scaleX;
+            var dy = b.cy * scaleY;
+            var radius = Math.max(4, Math.sqrt(b.size / Math.PI) * scaleX);
 
             // Red dot
             overlayCtx.beginPath();
@@ -1313,16 +1175,14 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
             // Size label
             overlayCtx.fillStyle = 'red';
             overlayCtx.font = 'bold 12px monospace';
-            overlayCtx.fillText(b.size * dsScale + 'px', dx + radius + 4, dy + 4);
+            overlayCtx.fillText(b.size + 'px', dx + radius + 4, dy + 4);
         }
 
-        // Results text
         if (blobs.length > 0) {
             var lines = [];
             for (var k = 0; k < blobs.length; k++) {
                 var bl = blobs[k];
-                var fullSize = bl.size * dsScale;
-                lines.push('Ball ' + (k + 1) + ': center=(' + Math.round(bl.cx * DS) + ',' + Math.round(bl.cy * DS) + ') size=' + fullSize + 'px');
+                lines.push('Ball ' + (k + 1) + ': center=(' + Math.round(bl.cx) + ',' + Math.round(bl.cy) + ') size=' + bl.size + 'px');
             }
             resultsDiv.textContent = blobs.length + ' ball(s) detected. ' + lines.join(' | ');
         } else {
@@ -1332,7 +1192,6 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
 
     toggle.addEventListener('change', runDetection);
 
-    // Re-run on video time changes
     var lastDetectTime = -1;
     function onFrameCheck() {
         if (!toggle.checked) {
@@ -1347,7 +1206,6 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     }
     requestAnimationFrame(onFrameCheck);
 
-    // Resize overlay when video resizes
     var ro = new ResizeObserver(function() {
         if (toggle.checked) runDetection();
     });
