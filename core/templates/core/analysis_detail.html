@@ -28,6 +28,7 @@
     </video>
     <div id="mark-overlay" style="display: none; position: absolute; top: 0; right: 0; min-width: 100px; height: 40px; color: white; font-weight: bold; font-size: 18px; pointer-events: none; text-align: center; line-height: 40px;"></div>
     <div id="segment-rect" style="display: none; position: absolute; border: 2px solid lime; pointer-events: none; box-sizing: border-box;"></div>
+    <canvas id="ball-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
 </div>
 
 <div id="video-controls" style="margin-top: 8px; display: flex; align-items: center; gap: 10px; max-width: 1280px;">
@@ -102,6 +103,25 @@
 <div id="segment-info" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px; display: none;">
     <h3 style="margin: 0 0 10px 0;">Segment</h3>
     <pre id="segment-json" style="margin: 0; font-family: monospace; white-space: pre-wrap;"></pre>
+</div>
+
+<div id="ball-detect-panel" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
+    <h3 style="margin: 0 0 10px 0;">Ball Detection</h3>
+    <div style="display: flex; flex-wrap: wrap; gap: 15px; align-items: end;">
+        <label style="display: flex; align-items: center; gap: 5px;">
+            <input type="checkbox" id="ball-detect-toggle">
+            Enable
+        </label>
+        <label>H min<br><input type="range" id="bd-h-min" min="0" max="360" value="0" style="width:80px"><span id="bd-h-min-val">0</span></label>
+        <label>H max<br><input type="range" id="bd-h-max" min="0" max="360" value="360" style="width:80px"><span id="bd-h-max-val">360</span></label>
+        <label>S min<br><input type="range" id="bd-s-min" min="0" max="100" value="30" style="width:80px"><span id="bd-s-min-val">30</span></label>
+        <label>S max<br><input type="range" id="bd-s-max" min="0" max="100" value="100" style="width:80px"><span id="bd-s-max-val">100</span></label>
+        <label>V min<br><input type="range" id="bd-v-min" min="0" max="100" value="30" style="width:80px"><span id="bd-v-min-val">30</span></label>
+        <label>V max<br><input type="range" id="bd-v-max" min="0" max="100" value="100" style="width:80px"><span id="bd-v-max-val">100</span></label>
+        <label>Min size (px)<br><input type="number" id="bd-min-size" min="1" max="100000" value="50" style="width:80px"></label>
+        <label>Max size (px)<br><input type="number" id="bd-max-size" min="1" max="100000" value="50000" style="width:80px"></label>
+    </div>
+    <div id="ball-detect-results" style="margin-top: 10px; font-family: monospace; font-size: 13px;"></div>
 </div>
 
 <p style="margin-top: 20px;"><a href="{% url 'event_detail' analysis.event.id %}">&larr; Back to {{ analysis.event.name }}</a></p>
@@ -955,6 +975,367 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
     }
 
     init();
+})();
+</script>
+
+<script>
+(function() {
+    var VERT_SRC = [
+        'attribute vec2 a_pos;',
+        'varying vec2 v_uv;',
+        'void main() {',
+        '  v_uv = a_pos * 0.5 + 0.5;',
+        '  gl_Position = vec4(a_pos, 0.0, 1.0);',
+        '}'
+    ].join('\n');
+
+    var FRAG_SRC = [
+        'precision mediump float;',
+        'varying vec2 v_uv;',
+        'uniform sampler2D u_video;',
+        'uniform float u_hMin;',
+        'uniform float u_hMax;',
+        'uniform float u_sMin;',
+        'uniform float u_sMax;',
+        'uniform float u_vMin;',
+        'uniform float u_vMax;',
+        '',
+        'vec3 rgb2hsv(vec3 c) {',
+        '  float cMax = max(c.r, max(c.g, c.b));',
+        '  float cMin = min(c.r, min(c.g, c.b));',
+        '  float d = cMax - cMin;',
+        '  float h = 0.0;',
+        '  if (d > 0.001) {',
+        '    if (cMax == c.r) h = mod((c.g - c.b) / d, 6.0);',
+        '    else if (cMax == c.g) h = (c.b - c.r) / d + 2.0;',
+        '    else h = (c.r - c.g) / d + 4.0;',
+        '    h *= 60.0;',
+        '    if (h < 0.0) h += 360.0;',
+        '  }',
+        '  float s = cMax > 0.001 ? d / cMax : 0.0;',
+        '  return vec3(h, s * 100.0, cMax * 100.0);',
+        '}',
+        '',
+        'void main() {',
+        '  vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);',
+        '  vec4 rgb = texture2D(u_video, uv);',
+        '  vec3 hsv = rgb2hsv(rgb.rgb);',
+        '  bool hOk;',
+        '  if (u_hMin <= u_hMax) {',
+        '    hOk = hsv.x >= u_hMin && hsv.x <= u_hMax;',
+        '  } else {',
+        '    hOk = hsv.x >= u_hMin || hsv.x <= u_hMax;',
+        '  }',
+        '  bool match = hOk && hsv.y >= u_sMin && hsv.y <= u_sMax && hsv.z >= u_vMin && hsv.z <= u_vMax;',
+        '  gl_FragColor = match ? vec4(1.0, 1.0, 1.0, 1.0) : vec4(0.0, 0.0, 0.0, 1.0);',
+        '}'
+    ].join('\n');
+
+    function createShader(gl, type, src) {
+        var s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+            console.error('Shader compile error:', gl.getShaderInfoLog(s));
+            gl.deleteShader(s);
+            return null;
+        }
+        return s;
+    }
+
+    function createProgram(gl, vs, fs) {
+        var p = gl.createProgram();
+        gl.attachShader(p, vs);
+        gl.attachShader(p, fs);
+        gl.linkProgram(p);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+            console.error('Program link error:', gl.getProgramInfoLog(p));
+            return null;
+        }
+        return p;
+    }
+
+    // Connected component labeling with union-find
+    function labelBlobs(mask, w, h) {
+        var labels = new Int32Array(w * h);
+        var parent = [0];
+        var nextLabel = 1;
+
+        function find(x) {
+            while (parent[x] !== x) {
+                parent[x] = parent[parent[x]];
+                x = parent[x];
+            }
+            return x;
+        }
+
+        function union(a, b) {
+            a = find(a);
+            b = find(b);
+            if (a !== b) {
+                if (a < b) parent[b] = a;
+                else parent[a] = b;
+            }
+        }
+
+        // First pass
+        for (var y = 0; y < h; y++) {
+            for (var x = 0; x < w; x++) {
+                var idx = y * w + x;
+                if (mask[idx] === 0) continue;
+
+                var up = (y > 0 && mask[idx - w]) ? labels[idx - w] : 0;
+                var left = (x > 0 && mask[idx - 1]) ? labels[idx - 1] : 0;
+
+                if (up === 0 && left === 0) {
+                    labels[idx] = nextLabel;
+                    parent.push(nextLabel);
+                    nextLabel++;
+                } else if (up !== 0 && left === 0) {
+                    labels[idx] = up;
+                } else if (up === 0 && left !== 0) {
+                    labels[idx] = left;
+                } else {
+                    labels[idx] = up;
+                    if (up !== left) union(up, left);
+                }
+            }
+        }
+
+        // Second pass - resolve labels
+        for (var i = 0; i < labels.length; i++) {
+            if (labels[i] > 0) {
+                labels[i] = find(labels[i]);
+            }
+        }
+
+        return labels;
+    }
+
+    function extractBlobs(labels, w, h, minSize, maxSize) {
+        var blobs = {};
+        for (var y = 0; y < h; y++) {
+            for (var x = 0; x < w; x++) {
+                var lbl = labels[y * w + x];
+                if (lbl === 0) continue;
+                if (!blobs[lbl]) {
+                    blobs[lbl] = { sumX: 0, sumY: 0, count: 0 };
+                }
+                blobs[lbl].sumX += x;
+                blobs[lbl].sumY += y;
+                blobs[lbl].count++;
+            }
+        }
+
+        var result = [];
+        var keys = Object.keys(blobs);
+        for (var i = 0; i < keys.length; i++) {
+            var b = blobs[keys[i]];
+            if (b.count >= minSize && b.count <= maxSize) {
+                result.push({
+                    cx: b.sumX / b.count,
+                    cy: b.sumY / b.count,
+                    size: b.count
+                });
+            }
+        }
+        return result;
+    }
+
+    var glCanvas = document.createElement('canvas');
+    var gl = glCanvas.getContext('webgl', { preserveDrawingBuffer: true });
+    if (!gl) {
+        console.warn('WebGL not available for ball detection');
+        return;
+    }
+
+    var vs = createShader(gl, gl.VERTEX_SHADER, VERT_SRC);
+    var fs = createShader(gl, gl.FRAGMENT_SHADER, FRAG_SRC);
+    if (!vs || !fs) return;
+    var prog = createProgram(gl, vs, fs);
+    if (!prog) return;
+
+    var aPosLoc = gl.getAttribLocation(prog, 'a_pos');
+    var uVideo = gl.getUniformLocation(prog, 'u_video');
+    var uHMin = gl.getUniformLocation(prog, 'u_hMin');
+    var uHMax = gl.getUniformLocation(prog, 'u_hMax');
+    var uSMin = gl.getUniformLocation(prog, 'u_sMin');
+    var uSMax = gl.getUniformLocation(prog, 'u_sMax');
+    var uVMin = gl.getUniformLocation(prog, 'u_vMin');
+    var uVMax = gl.getUniformLocation(prog, 'u_vMax');
+
+    var quadBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+
+    var tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    var overlayCanvas = document.getElementById('ball-overlay');
+    var overlayCtx = overlayCanvas.getContext('2d');
+    var videoEl = document.getElementById('video-player');
+    var toggle = document.getElementById('ball-detect-toggle');
+    var resultsDiv = document.getElementById('ball-detect-results');
+
+    // Downsample factor for performance
+    var DS = 4;
+
+    function getConfig() {
+        return {
+            hMin: parseFloat(document.getElementById('bd-h-min').value),
+            hMax: parseFloat(document.getElementById('bd-h-max').value),
+            sMin: parseFloat(document.getElementById('bd-s-min').value),
+            sMax: parseFloat(document.getElementById('bd-s-max').value),
+            vMin: parseFloat(document.getElementById('bd-v-min').value),
+            vMax: parseFloat(document.getElementById('bd-v-max').value),
+            minSize: parseInt(document.getElementById('bd-min-size').value) || 1,
+            maxSize: parseInt(document.getElementById('bd-max-size').value) || 100000
+        };
+    }
+
+    // Wire up slider value labels
+    ['bd-h-min','bd-h-max','bd-s-min','bd-s-max','bd-v-min','bd-v-max'].forEach(function(id) {
+        var slider = document.getElementById(id);
+        var valSpan = document.getElementById(id + '-val');
+        slider.addEventListener('input', function() {
+            valSpan.textContent = slider.value;
+            runDetection();
+        });
+    });
+
+    document.getElementById('bd-min-size').addEventListener('change', runDetection);
+    document.getElementById('bd-max-size').addEventListener('change', runDetection);
+
+    function runDetection() {
+        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+        resultsDiv.textContent = '';
+        if (!toggle.checked) return;
+        if (videoEl.readyState < 2) return;
+
+        var vw = videoEl.videoWidth;
+        var vh = videoEl.videoHeight;
+        if (vw === 0 || vh === 0) return;
+
+        var dw = Math.ceil(vw / DS);
+        var dh = Math.ceil(vh / DS);
+
+        glCanvas.width = dw;
+        glCanvas.height = dh;
+        gl.viewport(0, 0, dw, dh);
+
+        // Upload video frame as texture
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoEl);
+
+        var cfg = getConfig();
+
+        gl.useProgram(prog);
+        gl.uniform1i(uVideo, 0);
+        gl.uniform1f(uHMin, cfg.hMin);
+        gl.uniform1f(uHMax, cfg.hMax);
+        gl.uniform1f(uSMin, cfg.sMin);
+        gl.uniform1f(uSMax, cfg.sMax);
+        gl.uniform1f(uVMin, cfg.vMin);
+        gl.uniform1f(uVMax, cfg.vMax);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+        gl.enableVertexAttribArray(aPosLoc);
+        gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        // Read back thresholded mask
+        var pixels = new Uint8Array(dw * dh * 4);
+        gl.readPixels(0, 0, dw, dh, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+        // Build binary mask (1 = match, 0 = no match)
+        var mask = new Uint8Array(dw * dh);
+        for (var i = 0; i < mask.length; i++) {
+            mask[i] = pixels[i * 4] > 128 ? 1 : 0;
+        }
+
+        // Connected component labeling
+        var labels = labelBlobs(mask, dw, dh);
+
+        // Min/max size scaled to downsampled pixels
+        var dsScale = DS * DS;
+        var minPx = Math.max(1, Math.round(cfg.minSize / dsScale));
+        var maxPx = Math.round(cfg.maxSize / dsScale);
+
+        var blobs = extractBlobs(labels, dw, dh, minPx, maxPx);
+
+        // Draw on overlay
+        overlayCanvas.width = videoEl.clientWidth;
+        overlayCanvas.height = videoEl.clientHeight;
+
+        var scaleX = videoEl.clientWidth / vw;
+        var scaleY = videoEl.clientHeight / vh;
+
+        for (var j = 0; j < blobs.length; j++) {
+            var b = blobs[j];
+            // Convert from downsampled coords back to video coords, then to display coords
+            var dx = b.cx * DS * scaleX;
+            var dy = b.cy * DS * scaleY;
+            var radius = Math.max(4, Math.sqrt(b.size * dsScale / Math.PI) * scaleX * 0.5);
+
+            // Red dot
+            overlayCtx.beginPath();
+            overlayCtx.arc(dx, dy, 5, 0, Math.PI * 2);
+            overlayCtx.fillStyle = 'red';
+            overlayCtx.fill();
+
+            // Circle outline showing detected size
+            overlayCtx.beginPath();
+            overlayCtx.arc(dx, dy, radius, 0, Math.PI * 2);
+            overlayCtx.strokeStyle = 'red';
+            overlayCtx.lineWidth = 2;
+            overlayCtx.stroke();
+
+            // Size label
+            overlayCtx.fillStyle = 'red';
+            overlayCtx.font = 'bold 12px monospace';
+            overlayCtx.fillText(b.size * dsScale + 'px', dx + radius + 4, dy + 4);
+        }
+
+        // Results text
+        if (blobs.length > 0) {
+            var lines = [];
+            for (var k = 0; k < blobs.length; k++) {
+                var bl = blobs[k];
+                var fullSize = bl.size * dsScale;
+                lines.push('Ball ' + (k + 1) + ': center=(' + Math.round(bl.cx * DS) + ',' + Math.round(bl.cy * DS) + ') size=' + fullSize + 'px');
+            }
+            resultsDiv.textContent = blobs.length + ' ball(s) detected. ' + lines.join(' | ');
+        } else {
+            resultsDiv.textContent = 'No balls detected.';
+        }
+    }
+
+    toggle.addEventListener('change', runDetection);
+
+    // Re-run on video time changes
+    var lastDetectTime = -1;
+    function onFrameCheck() {
+        if (!toggle.checked) {
+            requestAnimationFrame(onFrameCheck);
+            return;
+        }
+        if (videoEl.currentTime !== lastDetectTime) {
+            lastDetectTime = videoEl.currentTime;
+            runDetection();
+        }
+        requestAnimationFrame(onFrameCheck);
+    }
+    requestAnimationFrame(onFrameCheck);
+
+    // Resize overlay when video resizes
+    var ro = new ResizeObserver(function() {
+        if (toggle.checked) runDetection();
+    });
+    ro.observe(videoEl);
 })();
 </script>
 {% endblock %}
