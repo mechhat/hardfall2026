@@ -113,6 +113,7 @@
 </form>
 
 <script src="{% static 'core/timeline.js' %}"></script>
+<script src="{% static 'core/vision.js' %}"></script>
 <script>
 window.ANALYSIS_ID = {{ analysis.id }};
 window.INITIAL_MARKS = {{ marks_json|safe }};
@@ -952,6 +953,21 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
                 return '';
             }
         });
+
+        // Add computer vision 
+        const video = document.querySelector("video");
+
+        // Yellow ball detection defaults are baked in, or override:
+        const ctrl = createHSVThreshold(video, {
+          hMin: 55, hMax: 65,
+          sMin: 65, sMax: 100,
+          vMin: 45, vMax: 100,
+        });
+        window.ctrl = ctrl
+
+        // Tweak live:
+        ctrl.setHSV({ hMin: 30, hMax: 65 });
+
     }
 
     init();
