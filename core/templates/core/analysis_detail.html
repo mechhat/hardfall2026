@@ -28,7 +28,6 @@
     </video>
     <div id="mark-overlay" style="display: none; position: absolute; top: 0; right: 0; min-width: 100px; height: 40px; color: white; font-weight: bold; font-size: 18px; pointer-events: none; text-align: center; line-height: 40px;"></div>
     <div id="segment-rect" style="display: none; position: absolute; border: 2px solid lime; pointer-events: none; box-sizing: border-box;"></div>
-    <canvas id="ball-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;"></canvas>
 </div>
 
 <div id="video-controls" style="margin-top: 8px; display: flex; align-items: center; gap: 10px; max-width: 1280px;">
@@ -103,25 +102,6 @@
 <div id="segment-info" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px; display: none;">
     <h3 style="margin: 0 0 10px 0;">Segment</h3>
     <pre id="segment-json" style="margin: 0; font-family: monospace; white-space: pre-wrap;"></pre>
-</div>
-
-<div id="ball-detect-panel" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
-    <h3 style="margin: 0 0 10px 0;">Ball Detection</h3>
-    <div style="display: flex; flex-wrap: wrap; gap: 15px; align-items: end;">
-        <label style="display: flex; align-items: center; gap: 5px;">
-            <input type="checkbox" id="ball-detect-toggle">
-            Enable
-        </label>
-        <label>H min<br><input type="range" id="bd-h-min" min="0" max="360" value="30" style="width:80px"><span id="bd-h-min-val">30</span></label>
-        <label>H max<br><input type="range" id="bd-h-max" min="0" max="360" value="65" style="width:80px"><span id="bd-h-max-val">65</span></label>
-        <label>S min<br><input type="range" id="bd-s-min" min="0" max="100" value="65" style="width:80px"><span id="bd-s-min-val">65</span></label>
-        <label>S max<br><input type="range" id="bd-s-max" min="0" max="100" value="100" style="width:80px"><span id="bd-s-max-val">100</span></label>
-        <label>V min<br><input type="range" id="bd-v-min" min="0" max="100" value="45" style="width:80px"><span id="bd-v-min-val">45</span></label>
-        <label>V max<br><input type="range" id="bd-v-max" min="0" max="100" value="100" style="width:80px"><span id="bd-v-max-val">100</span></label>
-        <label>Min size (px)<br><input type="number" id="bd-min-size" min="1" max="100000" value="4" style="width:80px"></label>
-        <label>Max size (px)<br><input type="number" id="bd-max-size" min="1" max="100000" value="30" style="width:80px"></label>
-    </div>
-    <div id="ball-detect-results" style="margin-top: 10px; font-family: monospace; font-size: 13px;"></div>
 </div>
 
 <p style="margin-top: 20px;"><a href="{% url 'event_detail' analysis.event.id %}">&larr; Back to {{ analysis.event.name }}</a></p>
@@ -977,239 +957,20 @@ window.SAVE_URL = '{% url "analysis_save_marks" analysis.id %}';
         // Add computer vision 
         const video = document.querySelector("video");
 
+        // Yellow ball detection defaults are baked in, or override:
         const ctrl = createHSVThreshold(video, {
-          hMin: 30, hMax: 65,
+          hMin: 55, hMax: 65,
           sMin: 65, sMax: 100,
           vMin: 45, vMax: 100,
         });
-        window.ctrl = ctrl;
+        window.ctrl = ctrl
+
+        // Tweak live:
+        ctrl.setHSV({ hMin: 30, hMax: 65 });
 
     }
 
     init();
-})();
-</script>
-
-<script>
-(function() {
-    // Connected component labeling with union-find
-    function labelBlobs(mask, w, h) {
-        var labels = new Int32Array(w * h);
-        var parent = [0];
-        var nextLabel = 1;
-
-        function find(x) {
-            while (parent[x] !== x) {
-                parent[x] = parent[parent[x]];
-                x = parent[x];
-            }
-            return x;
-        }
-
-        function union(a, b) {
-            a = find(a);
-            b = find(b);
-            if (a !== b) {
-                if (a < b) parent[b] = a;
-                else parent[a] = b;
-            }
-        }
-
-        for (var y = 0; y < h; y++) {
-            for (var x = 0; x < w; x++) {
-                var idx = y * w + x;
-                if (mask[idx] === 0) continue;
-
-                var up = (y > 0 && mask[idx - w]) ? labels[idx - w] : 0;
-                var left = (x > 0 && mask[idx - 1]) ? labels[idx - 1] : 0;
-
-                if (up === 0 && left === 0) {
-                    labels[idx] = nextLabel;
-                    parent.push(nextLabel);
-                    nextLabel++;
-                } else if (up !== 0 && left === 0) {
-                    labels[idx] = up;
-                } else if (up === 0 && left !== 0) {
-                    labels[idx] = left;
-                } else {
-                    labels[idx] = up;
-                    if (up !== left) union(up, left);
-                }
-            }
-        }
-
-        for (var i = 0; i < labels.length; i++) {
-            if (labels[i] > 0) {
-                labels[i] = find(labels[i]);
-            }
-        }
-
-        return labels;
-    }
-
-    function extractBlobs(labels, w, h, minSize, maxSize) {
-        var blobs = {};
-        for (var y = 0; y < h; y++) {
-            for (var x = 0; x < w; x++) {
-                var lbl = labels[y * w + x];
-                if (lbl === 0) continue;
-                if (!blobs[lbl]) {
-                    blobs[lbl] = { sumX: 0, sumY: 0, count: 0 };
-                }
-                blobs[lbl].sumX += x;
-                blobs[lbl].sumY += y;
-                blobs[lbl].count++;
-            }
-        }
-
-        var result = [];
-        var keys = Object.keys(blobs);
-        for (var i = 0; i < keys.length; i++) {
-            var b = blobs[keys[i]];
-            if (b.count >= minSize && b.count <= maxSize) {
-                result.push({
-                    cx: b.sumX / b.count,
-                    cy: b.sumY / b.count,
-                    size: b.count
-                });
-            }
-        }
-        return result;
-    }
-
-    var threshCanvas = window.ctrl ? window.ctrl.canvas : null;
-    if (!threshCanvas) {
-        console.warn('Vision threshold canvas not available for ball detection');
-        return;
-    }
-
-    // Offscreen 2D canvas to read pixels from the vision.js WebGL canvas
-    var readCanvas = document.createElement('canvas');
-    var readCtx = readCanvas.getContext('2d');
-
-    var overlayCanvas = document.getElementById('ball-overlay');
-    var overlayCtx = overlayCanvas.getContext('2d');
-    var videoEl = document.getElementById('video-player');
-    var toggle = document.getElementById('ball-detect-toggle');
-    var resultsDiv = document.getElementById('ball-detect-results');
-
-    // Wire HSV sliders to vision.js ctrl.setHSV
-    ['bd-h-min','bd-h-max','bd-s-min','bd-s-max','bd-v-min','bd-v-max'].forEach(function(id) {
-        var slider = document.getElementById(id);
-        var valSpan = document.getElementById(id + '-val');
-        slider.addEventListener('input', function() {
-            valSpan.textContent = slider.value;
-            window.ctrl.setHSV({
-                hMin: parseFloat(document.getElementById('bd-h-min').value),
-                hMax: parseFloat(document.getElementById('bd-h-max').value),
-                sMin: parseFloat(document.getElementById('bd-s-min').value),
-                sMax: parseFloat(document.getElementById('bd-s-max').value),
-                vMin: parseFloat(document.getElementById('bd-v-min').value),
-                vMax: parseFloat(document.getElementById('bd-v-max').value)
-            });
-            runDetection();
-        });
-    });
-
-    document.getElementById('bd-min-size').addEventListener('change', runDetection);
-    document.getElementById('bd-max-size').addEventListener('change', runDetection);
-
-    function runDetection() {
-        overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-        resultsDiv.textContent = '';
-        if (!toggle.checked) return;
-        if (videoEl.readyState < 2) return;
-
-        var tw = threshCanvas.width;
-        var th = threshCanvas.height;
-        if (tw === 0 || th === 0) return;
-
-        // Read the threshold canvas at full resolution
-        readCanvas.width = tw;
-        readCanvas.height = th;
-        readCtx.drawImage(threshCanvas, 0, 0);
-        var imageData = readCtx.getImageData(0, 0, tw, th);
-        var pixels = imageData.data;
-
-        // Build binary mask from the white pixels in the threshold output
-        var mask = new Uint8Array(tw * th);
-        for (var i = 0; i < mask.length; i++) {
-            mask[i] = pixels[i * 4] > 128 ? 1 : 0;
-        }
-
-        var labels = labelBlobs(mask, tw, th);
-
-        var minSize = parseInt(document.getElementById('bd-min-size').value) || 4;
-        var maxSize = parseInt(document.getElementById('bd-max-size').value) || 30;
-
-        var blobs = extractBlobs(labels, tw, th, minSize, maxSize);
-
-        // Draw on overlay
-        overlayCanvas.width = videoEl.clientWidth;
-        overlayCanvas.height = videoEl.clientHeight;
-
-        var vw = videoEl.videoWidth;
-        var vh = videoEl.videoHeight;
-        var scaleX = videoEl.clientWidth / vw;
-        var scaleY = videoEl.clientHeight / vh;
-
-        for (var j = 0; j < blobs.length; j++) {
-            var b = blobs[j];
-            var dx = b.cx * scaleX;
-            var dy = b.cy * scaleY;
-            var radius = Math.max(4, Math.sqrt(b.size / Math.PI) * scaleX);
-
-            // Red dot
-            overlayCtx.beginPath();
-            overlayCtx.arc(dx, dy, 5, 0, Math.PI * 2);
-            overlayCtx.fillStyle = 'red';
-            overlayCtx.fill();
-
-            // Circle outline showing detected size
-            overlayCtx.beginPath();
-            overlayCtx.arc(dx, dy, radius, 0, Math.PI * 2);
-            overlayCtx.strokeStyle = 'red';
-            overlayCtx.lineWidth = 2;
-            overlayCtx.stroke();
-
-            // Size label
-            overlayCtx.fillStyle = 'red';
-            overlayCtx.font = 'bold 12px monospace';
-            overlayCtx.fillText(b.size + 'px', dx + radius + 4, dy + 4);
-        }
-
-        if (blobs.length > 0) {
-            var lines = [];
-            for (var k = 0; k < blobs.length; k++) {
-                var bl = blobs[k];
-                lines.push('Ball ' + (k + 1) + ': center=(' + Math.round(bl.cx) + ',' + Math.round(bl.cy) + ') size=' + bl.size + 'px');
-            }
-            resultsDiv.textContent = blobs.length + ' ball(s) detected. ' + lines.join(' | ');
-        } else {
-            resultsDiv.textContent = 'No balls detected.';
-        }
-    }
-
-    toggle.addEventListener('change', runDetection);
-
-    var lastDetectTime = -1;
-    function onFrameCheck() {
-        if (!toggle.checked) {
-            requestAnimationFrame(onFrameCheck);
-            return;
-        }
-        if (videoEl.currentTime !== lastDetectTime) {
-            lastDetectTime = videoEl.currentTime;
-            runDetection();
-        }
-        requestAnimationFrame(onFrameCheck);
-    }
-    requestAnimationFrame(onFrameCheck);
-
-    var ro = new ResizeObserver(function() {
-        if (toggle.checked) runDetection();
-    });
-    ro.observe(videoEl);
 })();
 </script>
 {% endblock %}

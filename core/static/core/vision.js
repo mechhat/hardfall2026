@@ -27,7 +27,7 @@ function createHSVThreshold(videoEl, opts = {}) {
   canvas.style.display = computed.display === "none" ? "block" : computed.display;
   videoEl.parentNode.insertBefore(canvas, videoEl);
 
-  const gl = canvas.getContext("webgl", { antialias: false, preserveDrawingBuffer: true });
+  const gl = canvas.getContext("webgl", { antialias: false });
   if (!gl) throw new Error("WebGL not supported");
 
   // --- compile shaders ---
